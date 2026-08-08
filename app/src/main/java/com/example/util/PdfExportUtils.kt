@@ -490,36 +490,20 @@ object PdfExportUtils {
         if (photoBitmap != null && agencyConfig.pdfShowFotoPedagang) {
             val destWidth = imgRight - imgLeft
             val destHeight = imgBottom - imgTop
-            val destRatio = destWidth / destHeight
-            val srcWidth = photoBitmap.width.toFloat()
-            val srcHeight = photoBitmap.height.toFloat()
-            val srcRatio = srcWidth / srcHeight
 
             // Fill clean white background inside photo box
             val bgPaint = Paint().apply { color = Color.WHITE }
             canvas.drawRect(imgLeft, imgTop, imgRight, imgBottom, bgPaint)
 
-            // Aspect-fit photo inside frame, aligned to top so head and face remain focused at top
-            val (fitWidth, fitHeight) = if (srcRatio > destRatio) {
-                // Image is wider relative to frame -> fit to destWidth
-                val w = destWidth
-                val h = destWidth / srcRatio
-                Pair(w, minOf(destHeight, h))
-            } else {
-                // Image is taller or standard portrait -> fit to destHeight
-                val h = destHeight
-                val w = destHeight * srcRatio
-                Pair(minOf(destWidth, w), h)
-            }
+            val destRectF = RectF(imgLeft, imgTop, imgRight, imgBottom)
 
-            val drawLeft = imgLeft + (destWidth - fitWidth) / 2f
-            val drawTop = imgTop // Align to top of frame to preserve full face/head
-            val drawRight = drawLeft + fitWidth
-            val drawBottom = drawTop + fitHeight
+            // Smart crop source rectangle to fit target frame without distortion, centering face/head
+            val srcRect = getSmartCropSrcRect(photoBitmap, destWidth, destHeight)
 
-            val srcRect = Rect(0, 0, photoBitmap.width, photoBitmap.height)
-            val destRectF = RectF(drawLeft, drawTop, drawRight, drawBottom)
+            canvas.save()
+            canvas.clipRect(destRectF)
             canvas.drawBitmap(photoBitmap, srcRect, destRectF, Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG))
+            canvas.restore()
         } else {
             val placeholderBg = Paint().apply {
                 color = Color.parseColor("#E0E0E0")
@@ -694,5 +678,79 @@ object PdfExportUtils {
             e.printStackTrace()
             Toast.makeText(context, "PDF Tersimpan di: ${pdfFile.absolutePath}\n(Gagal membuka aplikasi penampil PDF)", Toast.LENGTH_LONG).show()
         }
+    }
+
+    /**
+     * Memotong bitmap secara presisi (CenterCrop dengan deteksi wajah/kepala)
+     * agar dapat sepenuhnya mengisi frame target tanpa terjadi distorsi / foto penyet,
+     * serta menempatkan posisi wajah/kepala di area tengah/3/4 frame.
+     */
+    private fun getSmartCropSrcRect(bitmap: Bitmap, targetWidth: Float, targetHeight: Float): Rect {
+        val srcWidth = bitmap.width.toFloat()
+        val srcHeight = bitmap.height.toFloat()
+        if (srcWidth <= 0f || srcHeight <= 0f || targetWidth <= 0f || targetHeight <= 0f) {
+            return Rect(0, 0, bitmap.width, bitmap.height)
+        }
+
+        val targetRatio = targetWidth / targetHeight
+        val srcRatio = srcWidth / srcHeight
+
+        val cropWidth: Float
+        val cropHeight: Float
+
+        if (srcRatio > targetRatio) {
+            cropHeight = srcHeight
+            cropWidth = srcHeight * targetRatio
+        } else {
+            cropWidth = srcWidth
+            cropHeight = srcWidth / targetRatio
+        }
+
+        var focalX = srcWidth / 2f
+        var focalY = srcHeight * 0.35f // Default area kepala/wajah di foto paspor/ID
+
+        try {
+            val maxDim = 400
+            val scale = minOf(1f, maxDim.toFloat() / maxOf(srcWidth, srcHeight))
+            val detectW = (srcWidth * scale).toInt().coerceAtLeast(1)
+            val detectH = (srcHeight * scale).toInt().coerceAtLeast(1)
+
+            val evenDetectW = if (detectW % 2 != 0) detectW - 1 else detectW
+            if (evenDetectW > 10 && detectH > 10) {
+                val scaledBmp = Bitmap.createScaledBitmap(bitmap, evenDetectW, detectH, true)
+                val rgb565Bmp = scaledBmp.copy(Bitmap.Config.RGB_565, false)
+                if (rgb565Bmp != null) {
+                    val detector = android.media.FaceDetector(rgb565Bmp.width, rgb565Bmp.height, 1)
+                    val faces = Array<android.media.FaceDetector.Face?>(1) { null }
+                    val numFound = detector.findFaces(rgb565Bmp, faces)
+                    if (numFound > 0 && faces[0] != null) {
+                        val midPoint = PointF()
+                        faces[0]!!.getMidPoint(midPoint)
+                        focalX = midPoint.x / scale
+                        focalY = midPoint.y / scale
+                    }
+                    rgb565Bmp.recycle()
+                }
+                if (scaledBmp != bitmap) scaledBmp.recycle()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        val maxCropLeft = (srcWidth - cropWidth).coerceAtLeast(0f)
+        val maxCropTop = (srcHeight - cropHeight).coerceAtLeast(0f)
+
+        val cropLeft = (focalX - cropWidth / 2f).coerceIn(0f, maxCropLeft)
+        val cropRight = cropLeft + cropWidth
+
+        val cropTop = (focalY - cropHeight * 0.35f).coerceIn(0f, maxCropTop)
+        val cropBottom = cropTop + cropHeight
+
+        return Rect(
+            cropLeft.toInt().coerceIn(0, bitmap.width),
+            cropTop.toInt().coerceIn(0, bitmap.height),
+            cropRight.toInt().coerceIn(0, bitmap.width),
+            cropBottom.toInt().coerceIn(0, bitmap.height)
+        )
     }
 }
