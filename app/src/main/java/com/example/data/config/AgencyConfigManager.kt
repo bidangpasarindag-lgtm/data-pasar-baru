@@ -67,6 +67,20 @@ data class AgencyConfig(
     val pdfShowStatus: Boolean = true,
     val pdfShowLama: Boolean = true,
 
+    // Visibilitas Atribut Form Tambah/Edit Pedagang
+    val formShowNik: Boolean = true,
+    val formShowAlamat: Boolean = true,
+    val formShowHp: Boolean = true,
+    val formShowJenisRuang: Boolean = true,
+    val formShowNomorKios: Boolean = true,
+    val formShowKomoditi: Boolean = true,
+    val formShowLamaBerjualan: Boolean = true,
+    val formShowStatus: Boolean = true,
+    val formShowKeterangan: Boolean = true,
+    val formShowFotoPedagang: Boolean = true,
+    val formShowFotoKtp: Boolean = true,
+    val formShowFotoSurat: Boolean = true,
+
     // Visibilitas Atribut Kartu Pendataan di Aplikasi
     val cardShowNik: Boolean = true,
     val cardShowHp: Boolean = true,
@@ -75,10 +89,16 @@ data class AgencyConfig(
     val cardShowStatus: Boolean = true,
     val cardShowQr: Boolean = true,
 
-    // Penyimpanan PDF
-    val pdfStorageSubfolder: String = "Kartu_Pedagang_PDF",
+    // Penyimpanan & Subfolder Download Data Aplikasi
+    val pdfStorageSubfolder: String = "si-pendata pasar",
     val pdfFileNameFormat: String = "KARTU_PEDAGANG_{NAMA}_{NOMOR_KIOS}",
     val pdfStorageDirectory: String = "DOCUMENTS", // DOCUMENTS atau DOWNLOADS
+    val storageMainFolder: String = "SI-PENDATAPASAR",
+    val storagePdfFolder: String = "PDF",
+    val storageExcelFolder: String = "EXCEL",
+    val storageAppsScriptFolder: String = "APPS_SCRIPT",
+    val storageFotoFolder: String = "FOTO",
+    val storageBackupConfigFolder: String = "BACKUP-KONFIGURASI",
 
     // Custom Label PDF
     val pdfLabelNama: String = "Nama Pedagang",
@@ -93,7 +113,7 @@ data class AgencyConfig(
     val pdfLabelFotoPlaceholder: String = "FOTO PEDAGANG",
     val pdfLabelLampiranPlaceholder: String = "(Lampiran)",
     val pdfLabelScanQr: String = "SCAN QR UNTUK VERIFIKASI",
-    val pdfLabelKeteranganHeader: String = "KETERANGAN / CATATAN KHUSUS:",
+    val pdfLabelKeteranganHeader: String = "Keterangan",
     val pdfLabelTerdataResmi: String = "✓ Pedagang dengan data di atas telah TERDATA secara resmi di Sistem Informasi Pendataan Pasar Waru.",
     val pdfLabelDiterbitkan: String = "Diterbitkan oleh Dinas Perindustrian dan Perdagangan Kabupaten Pamekasan pada {TANGGAL} ",
 
@@ -161,6 +181,7 @@ object AgencyConfigManager {
             driveFolderId = prefs.getString("drive_folder_id", "1G81CN0555Gst93hIosHG0lrUf4pP0ELO") ?: "1G81CN0555Gst93hIosHG0lrUf4pP0ELO",
             webhookUrl = prefs.getString("webhook_url", "https://script.google.com/macros/s/AKfycbzyIKCqNpmbhAxgbTWDPXwzZ1CyTgl8C_28CBtJkaoTQwXGHa7v2rdDFiLzkBrW7kjQ/exec") ?: "https://script.google.com/macros/s/AKfycbzyIKCqNpmbhAxgbTWDPXwzZ1CyTgl8C_28CBtJkaoTQwXGHa7v2rdDFiLzkBrW7kjQ/exec",
 
+            enableCompletenessWarning = prefs.getBoolean("enable_completeness_warning", true),
             requireNik = prefs.getBoolean("require_nik", true),
             requireFotoPedagang = prefs.getBoolean("require_foto_pedagang", true),
             requireFotoKtp = prefs.getBoolean("require_foto_ktp", true),
@@ -169,13 +190,24 @@ object AgencyConfigManager {
             requireAlamat = prefs.getBoolean("require_alamat", true),
             requireKomoditi = prefs.getBoolean("require_komoditi", true),
 
+            pdfPaperSize = prefs.getString("pdf_paper_size", "F5 Landscape") ?: "F5 Landscape",
+            pdfFontFamily = prefs.getString("pdf_font_family", "Sans-Serif") ?: "Sans-Serif",
+            pdfHeaderFontSize = prefs.getInt("pdf_header_font_size", 12),
+            pdfBodyFontSize = prefs.getInt("pdf_body_font_size", 10),
             pdfHeaderTitle = prefs.getString("pdf_header_title", "PEMERINTAH KABUPATEN PAMEKASAN") ?: "PEMERINTAH KABUPATEN PAMEKASAN",
             pdfHeaderSubtitle = prefs.getString("pdf_header_subtitle", "DINAS PERINDUSTRIAN DAN PERDAGANGAN") ?: "DINAS PERINDUSTRIAN DAN PERDAGANGAN",
             pdfHeaderAddress = prefs.getString("pdf_header_address", "Jalan Jokotole Nomor 199 Pamekasan 69322") ?: "Jalan Jokotole Nomor 199 Pamekasan 69322",
             pdfFontSize = prefs.getFloat("pdf_font_size", 12f),
             pdfShowLogo = prefs.getBoolean("pdf_show_logo", true),
+            pdfShowKopSurat = prefs.getBoolean("pdf_show_kop_surat", true),
+            pdfShowQrCode = prefs.getBoolean("pdf_show_qr_code", true),
+            pdfShowFotoPedagang = prefs.getBoolean("pdf_show_foto_pedagang", true),
+            pdfShowFotoKtp = prefs.getBoolean("pdf_show_foto_ktp", true),
+            pdfShowFotoSurat = prefs.getBoolean("pdf_show_foto_surat", true),
+            pdfShowSignatureBlock = prefs.getBoolean("pdf_show_signature_block", true),
             pdfShowQr = prefs.getBoolean("pdf_show_qr", true),
             pdfShowVerificationStatus = prefs.getBoolean("pdf_show_verification_status", true),
+            pdfFooterNote = prefs.getString("pdf_footer_note", "Bukti Pendataan Resmi - Dinas Perindustrian dan Perdagangan Kabupaten Pamekasan") ?: "Bukti Pendataan Resmi - Dinas Perindustrian dan Perdagangan Kabupaten Pamekasan",
             pdfFooterText = prefs.getString("pdf_footer_text", "Bukti Pendataan Resmi - Dinas Perindustrian dan Perdagangan Kabupaten Pamekasan") ?: "Bukti Pendataan Resmi - Dinas Perindustrian dan Perdagangan Kabupaten Pamekasan",
             pdfPejabatNama = prefs.getString("pdf_pejabat_nama", "Kepala Dinas Perindustrian dan Perdagangan") ?: "Kepala Dinas Perindustrian dan Perdagangan",
             pdfPejabatNip = prefs.getString("pdf_pejabat_nip", "19780512 200312 1 002") ?: "19780512 200312 1 002",
@@ -186,6 +218,20 @@ object AgencyConfigManager {
             pdfShowStatus = prefs.getBoolean("pdf_show_status", true),
             pdfShowLama = prefs.getBoolean("pdf_show_lama", true),
             pdfShowPetugas = prefs.getBoolean("pdf_show_petugas", true),
+            pdfTitleText = prefs.getString("pdf_title_text", "") ?: "",
+
+            formShowNik = prefs.getBoolean("form_show_nik", true),
+            formShowAlamat = prefs.getBoolean("form_show_alamat", true),
+            formShowHp = prefs.getBoolean("form_show_hp", true),
+            formShowJenisRuang = prefs.getBoolean("form_show_jenis_ruang", true),
+            formShowNomorKios = prefs.getBoolean("form_show_nomor_kios", true),
+            formShowKomoditi = prefs.getBoolean("form_show_komoditi", true),
+            formShowLamaBerjualan = prefs.getBoolean("form_show_lama_berjualan", true),
+            formShowStatus = prefs.getBoolean("form_show_status", true),
+            formShowKeterangan = prefs.getBoolean("form_show_keterangan", true),
+            formShowFotoPedagang = prefs.getBoolean("form_show_foto_pedagang", true),
+            formShowFotoKtp = prefs.getBoolean("form_show_foto_ktp", true),
+            formShowFotoSurat = prefs.getBoolean("form_show_foto_surat", true),
 
             cardShowNik = prefs.getBoolean("card_show_nik", true),
             cardShowHp = prefs.getBoolean("card_show_hp", true),
@@ -194,9 +240,15 @@ object AgencyConfigManager {
             cardShowStatus = prefs.getBoolean("card_show_status", true),
             cardShowQr = prefs.getBoolean("card_show_qr", true),
 
-            pdfStorageSubfolder = prefs.getString("pdf_storage_subfolder", "Kartu_Pedagang_PDF") ?: "Kartu_Pedagang_PDF",
+            pdfStorageSubfolder = prefs.getString("pdf_storage_subfolder", "si-pendata pasar") ?: "si-pendata pasar",
             pdfFileNameFormat = prefs.getString("pdf_file_name_format", "KARTU_PEDAGANG_{NAMA}_{NOMOR_KIOS}") ?: "KARTU_PEDAGANG_{NAMA}_{NOMOR_KIOS}",
             pdfStorageDirectory = prefs.getString("pdf_storage_directory", "DOCUMENTS") ?: "DOCUMENTS",
+            storageMainFolder = prefs.getString("storage_main_folder", "SI-PENDATAPASAR") ?: "SI-PENDATAPASAR",
+            storagePdfFolder = prefs.getString("storage_pdf_folder", "PDF") ?: "PDF",
+            storageExcelFolder = prefs.getString("storage_excel_folder", "EXCEL") ?: "EXCEL",
+            storageAppsScriptFolder = prefs.getString("storage_apps_script_folder", "APPS_SCRIPT") ?: "APPS_SCRIPT",
+            storageFotoFolder = prefs.getString("storage_foto_folder", "FOTO") ?: "FOTO",
+            storageBackupConfigFolder = prefs.getString("storage_backup_config_folder", "BACKUP-KONFIGURASI") ?: "BACKUP-KONFIGURASI",
 
             pdfLabelNama = prefs.getString("pdf_label_nama", "Nama Pedagang") ?: "Nama Pedagang",
             pdfLabelNik = prefs.getString("pdf_label_nik", "NIK / No. KTP") ?: "NIK / No. KTP",
@@ -210,7 +262,7 @@ object AgencyConfigManager {
             pdfLabelFotoPlaceholder = prefs.getString("pdf_label_foto_placeholder", "FOTO PEDAGANG") ?: "FOTO PEDAGANG",
             pdfLabelLampiranPlaceholder = prefs.getString("pdf_label_lampiran_placeholder", "(Lampiran)") ?: "(Lampiran)",
             pdfLabelScanQr = prefs.getString("pdf_label_scan_qr", "SCAN QR UNTUK VERIFIKASI") ?: "SCAN QR UNTUK VERIFIKASI",
-            pdfLabelKeteranganHeader = prefs.getString("pdf_label_keterangan_header", "KETERANGAN / CATATAN KHUSUS:") ?: "KETERANGAN / CATATAN KHUSUS:",
+            pdfLabelKeteranganHeader = prefs.getString("pdf_label_keterangan_header", "Keterangan") ?: "Keterangan",
             pdfLabelTerdataResmi = prefs.getString("pdf_label_terdata_resmi", "✓ Pedagang dengan data di atas telah TERDATA secara resmi di Sistem Informasi Pendataan Pasar Waru.") ?: "✓ Pedagang dengan data di atas telah TERDATA secara resmi di Sistem Informasi Pendataan Pasar Waru.",
             pdfLabelDiterbitkan = prefs.getString("pdf_label_diterbitkan", "Diterbitkan oleh Dinas Perindustrian dan Perdagangan Kabupaten Pamekasan pada {TANGGAL} ") ?: "Diterbitkan oleh Dinas Perindustrian dan Perdagangan Kabupaten Pamekasan pada {TANGGAL} ",
 
@@ -239,6 +291,7 @@ object AgencyConfigManager {
             .putString("drive_folder_id", newConfig.driveFolderId)
             .putString("webhook_url", newConfig.webhookUrl)
 
+            .putBoolean("enable_completeness_warning", newConfig.enableCompletenessWarning)
             .putBoolean("require_nik", newConfig.requireNik)
             .putBoolean("require_foto_pedagang", newConfig.requireFotoPedagang)
             .putBoolean("require_foto_ktp", newConfig.requireFotoKtp)
@@ -247,13 +300,24 @@ object AgencyConfigManager {
             .putBoolean("require_alamat", newConfig.requireAlamat)
             .putBoolean("require_komoditi", newConfig.requireKomoditi)
 
+            .putString("pdf_paper_size", newConfig.pdfPaperSize)
+            .putString("pdf_font_family", newConfig.pdfFontFamily)
+            .putInt("pdf_header_font_size", newConfig.pdfHeaderFontSize)
+            .putInt("pdf_body_font_size", newConfig.pdfBodyFontSize)
             .putString("pdf_header_title", newConfig.pdfHeaderTitle)
             .putString("pdf_header_subtitle", newConfig.pdfHeaderSubtitle)
             .putString("pdf_header_address", newConfig.pdfHeaderAddress)
             .putFloat("pdf_font_size", newConfig.pdfFontSize)
             .putBoolean("pdf_show_logo", newConfig.pdfShowLogo)
+            .putBoolean("pdf_show_kop_surat", newConfig.pdfShowKopSurat)
+            .putBoolean("pdf_show_qr_code", newConfig.pdfShowQrCode)
+            .putBoolean("pdf_show_foto_pedagang", newConfig.pdfShowFotoPedagang)
+            .putBoolean("pdf_show_foto_ktp", newConfig.pdfShowFotoKtp)
+            .putBoolean("pdf_show_foto_surat", newConfig.pdfShowFotoSurat)
+            .putBoolean("pdf_show_signature_block", newConfig.pdfShowSignatureBlock)
             .putBoolean("pdf_show_qr", newConfig.pdfShowQr)
             .putBoolean("pdf_show_verification_status", newConfig.pdfShowVerificationStatus)
+            .putString("pdf_footer_note", newConfig.pdfFooterNote)
             .putString("pdf_footer_text", newConfig.pdfFooterText)
             .putString("pdf_pejabat_nama", newConfig.pdfPejabatNama)
             .putString("pdf_pejabat_nip", newConfig.pdfPejabatNip)
@@ -264,6 +328,20 @@ object AgencyConfigManager {
             .putBoolean("pdf_show_status", newConfig.pdfShowStatus)
             .putBoolean("pdf_show_lama", newConfig.pdfShowLama)
             .putBoolean("pdf_show_petugas", newConfig.pdfShowPetugas)
+            .putString("pdf_title_text", newConfig.pdfTitleText)
+
+            .putBoolean("form_show_nik", newConfig.formShowNik)
+            .putBoolean("form_show_alamat", newConfig.formShowAlamat)
+            .putBoolean("form_show_hp", newConfig.formShowHp)
+            .putBoolean("form_show_jenis_ruang", newConfig.formShowJenisRuang)
+            .putBoolean("form_show_nomor_kios", newConfig.formShowNomorKios)
+            .putBoolean("form_show_komoditi", newConfig.formShowKomoditi)
+            .putBoolean("form_show_lama_berjualan", newConfig.formShowLamaBerjualan)
+            .putBoolean("form_show_status", newConfig.formShowStatus)
+            .putBoolean("form_show_keterangan", newConfig.formShowKeterangan)
+            .putBoolean("form_show_foto_pedagang", newConfig.formShowFotoPedagang)
+            .putBoolean("form_show_foto_ktp", newConfig.formShowFotoKtp)
+            .putBoolean("form_show_foto_surat", newConfig.formShowFotoSurat)
 
             .putBoolean("card_show_nik", newConfig.cardShowNik)
             .putBoolean("card_show_hp", newConfig.cardShowHp)
@@ -275,6 +353,12 @@ object AgencyConfigManager {
             .putString("pdf_storage_subfolder", newConfig.pdfStorageSubfolder)
             .putString("pdf_file_name_format", newConfig.pdfFileNameFormat)
             .putString("pdf_storage_directory", newConfig.pdfStorageDirectory)
+            .putString("storage_main_folder", newConfig.storageMainFolder)
+            .putString("storage_pdf_folder", newConfig.storagePdfFolder)
+            .putString("storage_excel_folder", newConfig.storageExcelFolder)
+            .putString("storage_apps_script_folder", newConfig.storageAppsScriptFolder)
+            .putString("storage_foto_folder", newConfig.storageFotoFolder)
+            .putString("storage_backup_config_folder", newConfig.storageBackupConfigFolder)
 
             .putString("pdf_label_nama", newConfig.pdfLabelNama)
             .putString("pdf_label_nik", newConfig.pdfLabelNik)
@@ -323,6 +407,7 @@ object AgencyConfigManager {
         json.put("driveFolderId", config.driveFolderId)
         json.put("webhookUrl", config.webhookUrl)
 
+        json.put("enableCompletenessWarning", config.enableCompletenessWarning)
         json.put("requireNik", config.requireNik)
         json.put("requireFotoPedagang", config.requireFotoPedagang)
         json.put("requireFotoKtp", config.requireFotoKtp)
@@ -331,13 +416,24 @@ object AgencyConfigManager {
         json.put("requireAlamat", config.requireAlamat)
         json.put("requireKomoditi", config.requireKomoditi)
 
+        json.put("pdfPaperSize", config.pdfPaperSize)
+        json.put("pdfFontFamily", config.pdfFontFamily)
+        json.put("pdfHeaderFontSize", config.pdfHeaderFontSize)
+        json.put("pdfBodyFontSize", config.pdfBodyFontSize)
         json.put("pdfHeaderTitle", config.pdfHeaderTitle)
         json.put("pdfHeaderSubtitle", config.pdfHeaderSubtitle)
         json.put("pdfHeaderAddress", config.pdfHeaderAddress)
         json.put("pdfFontSize", config.pdfFontSize.toDouble())
         json.put("pdfShowLogo", config.pdfShowLogo)
+        json.put("pdfShowKopSurat", config.pdfShowKopSurat)
+        json.put("pdfShowQrCode", config.pdfShowQrCode)
+        json.put("pdfShowFotoPedagang", config.pdfShowFotoPedagang)
+        json.put("pdfShowFotoKtp", config.pdfShowFotoKtp)
+        json.put("pdfShowFotoSurat", config.pdfShowFotoSurat)
+        json.put("pdfShowSignatureBlock", config.pdfShowSignatureBlock)
         json.put("pdfShowQr", config.pdfShowQr)
         json.put("pdfShowVerificationStatus", config.pdfShowVerificationStatus)
+        json.put("pdfFooterNote", config.pdfFooterNote)
         json.put("pdfFooterText", config.pdfFooterText)
         json.put("pdfPejabatNama", config.pdfPejabatNama)
         json.put("pdfPejabatNip", config.pdfPejabatNip)
@@ -348,6 +444,20 @@ object AgencyConfigManager {
         json.put("pdfShowStatus", config.pdfShowStatus)
         json.put("pdfShowLama", config.pdfShowLama)
         json.put("pdfShowPetugas", config.pdfShowPetugas)
+        json.put("pdfTitleText", config.pdfTitleText)
+
+        json.put("formShowNik", config.formShowNik)
+        json.put("formShowAlamat", config.formShowAlamat)
+        json.put("formShowHp", config.formShowHp)
+        json.put("formShowJenisRuang", config.formShowJenisRuang)
+        json.put("formShowNomorKios", config.formShowNomorKios)
+        json.put("formShowKomoditi", config.formShowKomoditi)
+        json.put("formShowLamaBerjualan", config.formShowLamaBerjualan)
+        json.put("formShowStatus", config.formShowStatus)
+        json.put("formShowKeterangan", config.formShowKeterangan)
+        json.put("formShowFotoPedagang", config.formShowFotoPedagang)
+        json.put("formShowFotoKtp", config.formShowFotoKtp)
+        json.put("formShowFotoSurat", config.formShowFotoSurat)
 
         json.put("cardShowNik", config.cardShowNik)
         json.put("cardShowHp", config.cardShowHp)
@@ -359,6 +469,12 @@ object AgencyConfigManager {
         json.put("pdfStorageSubfolder", config.pdfStorageSubfolder)
         json.put("pdfFileNameFormat", config.pdfFileNameFormat)
         json.put("pdfStorageDirectory", config.pdfStorageDirectory)
+        json.put("storageMainFolder", config.storageMainFolder)
+        json.put("storagePdfFolder", config.storagePdfFolder)
+        json.put("storageExcelFolder", config.storageExcelFolder)
+        json.put("storageAppsScriptFolder", config.storageAppsScriptFolder)
+        json.put("storageFotoFolder", config.storageFotoFolder)
+        json.put("storageBackupConfigFolder", config.storageBackupConfigFolder)
 
         json.put("pdfLabelNama", config.pdfLabelNama)
         json.put("pdfLabelNik", config.pdfLabelNik)
@@ -404,6 +520,7 @@ object AgencyConfigManager {
                 driveFolderId = json.optString("driveFolderId", curr.driveFolderId),
                 webhookUrl = json.optString("webhookUrl", curr.webhookUrl),
 
+                enableCompletenessWarning = json.optBoolean("enableCompletenessWarning", curr.enableCompletenessWarning),
                 requireNik = json.optBoolean("requireNik", curr.requireNik),
                 requireFotoPedagang = json.optBoolean("requireFotoPedagang", curr.requireFotoPedagang),
                 requireFotoKtp = json.optBoolean("requireFotoKtp", curr.requireFotoKtp),
@@ -412,13 +529,24 @@ object AgencyConfigManager {
                 requireAlamat = json.optBoolean("requireAlamat", curr.requireAlamat),
                 requireKomoditi = json.optBoolean("requireKomoditi", curr.requireKomoditi),
 
+                pdfPaperSize = json.optString("pdfPaperSize", curr.pdfPaperSize),
+                pdfFontFamily = json.optString("pdfFontFamily", curr.pdfFontFamily),
+                pdfHeaderFontSize = json.optInt("pdfHeaderFontSize", curr.pdfHeaderFontSize),
+                pdfBodyFontSize = json.optInt("pdfBodyFontSize", curr.pdfBodyFontSize),
                 pdfHeaderTitle = json.optString("pdfHeaderTitle", curr.pdfHeaderTitle),
                 pdfHeaderSubtitle = json.optString("pdfHeaderSubtitle", curr.pdfHeaderSubtitle),
                 pdfHeaderAddress = json.optString("pdfHeaderAddress", curr.pdfHeaderAddress),
                 pdfFontSize = json.optDouble("pdfFontSize", curr.pdfFontSize.toDouble()).toFloat(),
                 pdfShowLogo = json.optBoolean("pdfShowLogo", curr.pdfShowLogo),
+                pdfShowKopSurat = json.optBoolean("pdfShowKopSurat", curr.pdfShowKopSurat),
+                pdfShowQrCode = json.optBoolean("pdfShowQrCode", curr.pdfShowQrCode),
+                pdfShowFotoPedagang = json.optBoolean("pdfShowFotoPedagang", curr.pdfShowFotoPedagang),
+                pdfShowFotoKtp = json.optBoolean("pdfShowFotoKtp", curr.pdfShowFotoKtp),
+                pdfShowFotoSurat = json.optBoolean("pdfShowFotoSurat", curr.pdfShowFotoSurat),
+                pdfShowSignatureBlock = json.optBoolean("pdfShowSignatureBlock", curr.pdfShowSignatureBlock),
                 pdfShowQr = json.optBoolean("pdfShowQr", curr.pdfShowQr),
                 pdfShowVerificationStatus = json.optBoolean("pdfShowVerificationStatus", curr.pdfShowVerificationStatus),
+                pdfFooterNote = json.optString("pdfFooterNote", curr.pdfFooterNote),
                 pdfFooterText = json.optString("pdfFooterText", curr.pdfFooterText),
                 pdfPejabatNama = json.optString("pdfPejabatNama", curr.pdfPejabatNama),
                 pdfPejabatNip = json.optString("pdfPejabatNip", curr.pdfPejabatNip),
@@ -429,6 +557,20 @@ object AgencyConfigManager {
                 pdfShowStatus = json.optBoolean("pdfShowStatus", curr.pdfShowStatus),
                 pdfShowLama = json.optBoolean("pdfShowLama", curr.pdfShowLama),
                 pdfShowPetugas = json.optBoolean("pdfShowPetugas", curr.pdfShowPetugas),
+                pdfTitleText = json.optString("pdfTitleText", curr.pdfTitleText),
+
+                formShowNik = json.optBoolean("formShowNik", curr.formShowNik),
+                formShowAlamat = json.optBoolean("formShowAlamat", curr.formShowAlamat),
+                formShowHp = json.optBoolean("formShowHp", curr.formShowHp),
+                formShowJenisRuang = json.optBoolean("formShowJenisRuang", curr.formShowJenisRuang),
+                formShowNomorKios = json.optBoolean("formShowNomorKios", curr.formShowNomorKios),
+                formShowKomoditi = json.optBoolean("formShowKomoditi", curr.formShowKomoditi),
+                formShowLamaBerjualan = json.optBoolean("formShowLamaBerjualan", curr.formShowLamaBerjualan),
+                formShowStatus = json.optBoolean("formShowStatus", curr.formShowStatus),
+                formShowKeterangan = json.optBoolean("formShowKeterangan", curr.formShowKeterangan),
+                formShowFotoPedagang = json.optBoolean("formShowFotoPedagang", curr.formShowFotoPedagang),
+                formShowFotoKtp = json.optBoolean("formShowFotoKtp", curr.formShowFotoKtp),
+                formShowFotoSurat = json.optBoolean("formShowFotoSurat", curr.formShowFotoSurat),
 
                 cardShowNik = json.optBoolean("cardShowNik", curr.cardShowNik),
                 cardShowHp = json.optBoolean("cardShowHp", curr.cardShowHp),
@@ -440,6 +582,12 @@ object AgencyConfigManager {
                 pdfStorageSubfolder = json.optString("pdfStorageSubfolder", curr.pdfStorageSubfolder),
                 pdfFileNameFormat = json.optString("pdfFileNameFormat", curr.pdfFileNameFormat),
                 pdfStorageDirectory = json.optString("pdfStorageDirectory", curr.pdfStorageDirectory),
+                storageMainFolder = json.optString("storageMainFolder", curr.storageMainFolder),
+                storagePdfFolder = json.optString("storagePdfFolder", curr.storagePdfFolder),
+                storageExcelFolder = json.optString("storageExcelFolder", curr.storageExcelFolder),
+                storageAppsScriptFolder = json.optString("storageAppsScriptFolder", curr.storageAppsScriptFolder),
+                storageFotoFolder = json.optString("storageFotoFolder", curr.storageFotoFolder),
+                storageBackupConfigFolder = json.optString("storageBackupConfigFolder", curr.storageBackupConfigFolder),
 
                 pdfLabelNama = json.optString("pdfLabelNama", curr.pdfLabelNama),
                 pdfLabelNik = json.optString("pdfLabelNik", curr.pdfLabelNik),

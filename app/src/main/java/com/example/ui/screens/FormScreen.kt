@@ -36,7 +36,8 @@ fun FormScreen(
     onUpdateForm: ((FormState) -> FormState) -> Unit,
     onAddOption: (category: String, newValue: String) -> Unit,
     onSaveClick: () -> Unit,
-    onViewPhoto: (String) -> Unit
+    onViewPhoto: (String) -> Unit,
+    config: com.example.data.config.AgencyConfig = com.example.data.config.AgencyConfig()
 ) {
     var activeAddOptionCategory by remember { mutableStateOf<String?>(null) }
 
@@ -63,7 +64,7 @@ fun FormScreen(
                     color = Color.White
                 )
                 Text(
-                    text = "Pasar Waru Kabupaten Pamekasan - Disperindag Pamekasan",
+                    text = "${config.namaPasar} - Disperindag ${config.namaPemerintah}",
                     fontSize = 12.sp,
                     color = DisperindagAccentGold
                 )
@@ -97,72 +98,80 @@ fun FormScreen(
         }
 
         // Section 2: Personal Info
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("DATA DIRI PEDAGANG", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DisperindagGreenPrimary)
+        if (config.formShowNik || config.formShowAlamat || config.formShowHp || true) { // Nama is always shown
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("DATA DIRI PEDAGANG", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DisperindagGreenPrimary)
 
-                // NAMA PEDAGANG (Wajib)
-                OutlinedTextField(
-                    value = formState.namaPedagang,
-                    onValueChange = { newName -> onUpdateForm { it.copy(namaPedagang = newName, namaError = null) } },
-                    label = { Text("NAMA PEDAGANG *") },
-                    isError = formState.namaError != null,
-                    supportingText = formState.namaError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("form_nama_pedagang_input")
-                )
+                    // NAMA PEDAGANG (Wajib)
+                    OutlinedTextField(
+                        value = formState.namaPedagang,
+                        onValueChange = { newName -> onUpdateForm { it.copy(namaPedagang = newName, namaError = null) } },
+                        label = { Text("NAMA PEDAGANG *") },
+                        isError = formState.namaError != null,
+                        supportingText = formState.namaError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("form_nama_pedagang_input")
+                    )
 
-                // NIK (16 digit, Boleh Kosong)
-                OutlinedTextField(
-                    value = formState.nik,
-                    onValueChange = { newNik ->
-                        if (newNik.length <= 16) {
-                            onUpdateForm { it.copy(nik = newNik, nikError = null) }
-                        }
-                    },
-                    label = { Text("NIK (16 Digit, Boleh tidak diisi)") },
-                    isError = formState.nikError != null,
-                    supportingText = formState.nikError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("form_nik_input")
-                )
+                    // NIK (16 digit, Boleh Kosong)
+                    if (config.formShowNik) {
+                        OutlinedTextField(
+                            value = formState.nik,
+                            onValueChange = { newNik ->
+                                if (newNik.length <= 16) {
+                                    onUpdateForm { it.copy(nik = newNik, nikError = null) }
+                                }
+                            },
+                            label = { Text("NIK (16 Digit, Boleh tidak diisi)") },
+                            isError = formState.nikError != null,
+                            supportingText = formState.nikError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("form_nik_input")
+                        )
+                    }
 
-                // ALAMAT (Boleh Kosong)
-                OutlinedTextField(
-                    value = formState.alamat,
-                    onValueChange = { newAlamat -> onUpdateForm { it.copy(alamat = newAlamat) } },
-                    label = { Text("ALAMAT (Boleh tidak diisi)") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("form_alamat_input")
-                )
+                    // ALAMAT (Boleh Kosong)
+                    if (config.formShowAlamat) {
+                        OutlinedTextField(
+                            value = formState.alamat,
+                            onValueChange = { newAlamat -> onUpdateForm { it.copy(alamat = newAlamat) } },
+                            label = { Text("ALAMAT (Boleh tidak diisi)") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("form_alamat_input")
+                        )
+                    }
 
-                // NOMOR HP (Mulai 0, 9-13 digit, Boleh Kosong)
-                OutlinedTextField(
-                    value = formState.nomorHp,
-                    onValueChange = { newHp ->
-                        if (newHp.length <= 13) {
-                            onUpdateForm { it.copy(nomorHp = newHp, hpError = null) }
-                        }
-                    },
-                    label = { Text("NOMOR HP (Mulai 0, 9-13 digit, Boleh tidak diisi)") },
-                    isError = formState.hpError != null,
-                    supportingText = formState.hpError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("form_nomor_hp_input")
-                )
+                    // NOMOR HP (Mulai 0, 9-13 digit, Boleh Kosong)
+                    if (config.formShowHp) {
+                        OutlinedTextField(
+                            value = formState.nomorHp,
+                            onValueChange = { newHp ->
+                                if (newHp.length <= 13) {
+                                    onUpdateForm { it.copy(nomorHp = newHp, hpError = null) }
+                                }
+                            },
+                            label = { Text("NOMOR HP (Mulai 0, 9-13 digit, Boleh tidak diisi)") },
+                            isError = formState.hpError != null,
+                            supportingText = formState.hpError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("form_nomor_hp_input")
+                        )
+                    }
+                }
             }
         }
 
@@ -176,113 +185,133 @@ fun FormScreen(
                 Text("INFORMASI RUANG DAGANG & USAHA", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DisperindagGreenPrimary)
 
                 // JENIS RUANG DAGANG (Dropdown + Custom option)
-                DynamicDropdownField(
-                    label = "JENIS RUANG DAGANG *",
-                    selectedValue = formState.jenisRuangDagang,
-                    options = jenisRuangOptions,
-                    isError = formState.jenisRuangError != null,
-                    errorMessage = formState.jenisRuangError,
-                    onSelect = { selected -> onUpdateForm { it.copy(jenisRuangDagang = selected, jenisRuangError = null) } },
-                    onAddCustom = { activeAddOptionCategory = "JENIS_RUANG" },
-                    testTag = "dropdown_jenis_ruang"
-                )
+                if (config.formShowJenisRuang) {
+                    DynamicDropdownField(
+                        label = "JENIS RUANG DAGANG *",
+                        selectedValue = formState.jenisRuangDagang,
+                        options = jenisRuangOptions,
+                        isError = formState.jenisRuangError != null,
+                        errorMessage = formState.jenisRuangError,
+                        onSelect = { selected -> onUpdateForm { it.copy(jenisRuangDagang = selected, jenisRuangError = null) } },
+                        onAddCustom = { activeAddOptionCategory = "JENIS_RUANG" },
+                        testTag = "dropdown_jenis_ruang"
+                    )
+                }
 
                 // NOMOR KIOS/LOS (Wajib)
-                OutlinedTextField(
-                    value = formState.nomorKiosLos,
-                    onValueChange = { newKios -> onUpdateForm { it.copy(nomorKiosLos = newKios, nomorKiosError = null) } },
-                    label = { Text("NOMOR KIOS/LOS *") },
-                    isError = formState.nomorKiosError != null,
-                    supportingText = formState.nomorKiosError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("form_nomor_kios_input")
-                )
+                if (config.formShowNomorKios) {
+                    OutlinedTextField(
+                        value = formState.nomorKiosLos,
+                        onValueChange = { newKios -> onUpdateForm { it.copy(nomorKiosLos = newKios, nomorKiosError = null) } },
+                        label = { Text("NOMOR KIOS/LOS *") },
+                        isError = formState.nomorKiosError != null,
+                        supportingText = formState.nomorKiosError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("form_nomor_kios_input")
+                    )
+                }
 
                 // KOMODITI / JENIS USAHA (Dropdown + Custom option)
-                DynamicDropdownField(
-                    label = "KOMODITI / JENIS USAHA *",
-                    selectedValue = formState.komoditi,
-                    options = komoditiOptions,
-                    isError = formState.komoditiError != null,
-                    errorMessage = formState.komoditiError,
-                    onSelect = { selected -> onUpdateForm { it.copy(komoditi = selected, komoditiError = null) } },
-                    onAddCustom = { activeAddOptionCategory = "KOMODITI" },
-                    testTag = "dropdown_komoditi"
-                )
+                if (config.formShowKomoditi) {
+                    DynamicDropdownField(
+                        label = "KOMODITI / JENIS USAHA *",
+                        selectedValue = formState.komoditi,
+                        options = komoditiOptions,
+                        isError = formState.komoditiError != null,
+                        errorMessage = formState.komoditiError,
+                        onSelect = { selected -> onUpdateForm { it.copy(komoditi = selected, komoditiError = null) } },
+                        onAddCustom = { activeAddOptionCategory = "KOMODITI" },
+                        testTag = "dropdown_komoditi"
+                    )
+                }
 
                 // LAMA BERJUALAN (Angka dalam tahun, Wajib)
-                OutlinedTextField(
-                    value = formState.lamaBerjualanStr,
-                    onValueChange = { newLama -> onUpdateForm { it.copy(lamaBerjualanStr = newLama, lamaBerjualanError = null) } },
-                    label = { Text("LAMA BERJUALAN (Tahun) *") },
-                    isError = formState.lamaBerjualanError != null,
-                    supportingText = formState.lamaBerjualanError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("form_lama_berjualan_input")
-                )
+                if (config.formShowLamaBerjualan) {
+                    OutlinedTextField(
+                        value = formState.lamaBerjualanStr,
+                        onValueChange = { newLama -> onUpdateForm { it.copy(lamaBerjualanStr = newLama, lamaBerjualanError = null) } },
+                        label = { Text("LAMA BERJUALAN (Tahun) *") },
+                        isError = formState.lamaBerjualanError != null,
+                        supportingText = formState.lamaBerjualanError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("form_lama_berjualan_input")
+                    )
+                }
 
                 // STATUS (Dropdown + Custom option)
-                DynamicDropdownField(
-                    label = "STATUS *",
-                    selectedValue = formState.status,
-                    options = statusOptions,
-                    isError = formState.statusError != null,
-                    errorMessage = formState.statusError,
-                    onSelect = { selected -> onUpdateForm { it.copy(status = selected, statusError = null) } },
-                    onAddCustom = { activeAddOptionCategory = "STATUS" },
-                    testTag = "dropdown_status"
-                )
+                if (config.formShowStatus) {
+                    DynamicDropdownField(
+                        label = "STATUS *",
+                        selectedValue = formState.status,
+                        options = statusOptions,
+                        isError = formState.statusError != null,
+                        errorMessage = formState.statusError,
+                        onSelect = { selected -> onUpdateForm { it.copy(status = selected, statusError = null) } },
+                        onAddCustom = { activeAddOptionCategory = "STATUS" },
+                        testTag = "dropdown_status"
+                    )
+                }
 
                 // KETERANGAN (Boleh Kosong)
-                OutlinedTextField(
-                    value = formState.keterangan,
-                    onValueChange = { newKet -> onUpdateForm { it.copy(keterangan = newKet) } },
-                    label = { Text("KETERANGAN (Boleh tidak diisi)") },
-                    minLines = 2,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("form_keterangan_input")
-                )
+                if (config.formShowKeterangan) {
+                    OutlinedTextField(
+                        value = formState.keterangan,
+                        onValueChange = { newKet -> onUpdateForm { it.copy(keterangan = newKet) } },
+                        label = { Text("KETERANGAN (Boleh tidak diisi)") },
+                        minLines = 2,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("form_keterangan_input")
+                    )
+                }
             }
         }
 
         // Section 4: Photo Documents
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("DOKUMEN FOTO (Kamera / Gallery)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DisperindagGreenPrimary)
+        if (config.formShowFotoPedagang || config.formShowFotoKtp || config.formShowFotoSurat) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text("DOKUMEN FOTO (Kamera / Gallery)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DisperindagGreenPrimary)
 
-                ImagePickerField(
-                    label = "FOTO PEDAGANG",
-                    imageUri = formState.fotoPedagangUri,
-                    onImageSelected = { uri -> onUpdateForm { it.copy(fotoPedagangUri = uri) } },
-                    onViewImage = onViewPhoto,
-                    testTagPrefix = "foto_pedagang"
-                )
+                    if (config.formShowFotoPedagang) {
+                        ImagePickerField(
+                            label = "FOTO PEDAGANG",
+                            imageUri = formState.fotoPedagangUri,
+                            onImageSelected = { uri -> onUpdateForm { it.copy(fotoPedagangUri = uri) } },
+                            onViewImage = onViewPhoto,
+                            testTagPrefix = "foto_pedagang"
+                        )
+                    }
 
-                ImagePickerField(
-                    label = "FOTO KTP",
-                    imageUri = formState.fotoKtpUri,
-                    onImageSelected = { uri -> onUpdateForm { it.copy(fotoKtpUri = uri) } },
-                    onViewImage = onViewPhoto,
-                    testTagPrefix = "foto_ktp"
-                )
+                    if (config.formShowFotoKtp) {
+                        ImagePickerField(
+                            label = "FOTO KTP",
+                            imageUri = formState.fotoKtpUri,
+                            onImageSelected = { uri -> onUpdateForm { it.copy(fotoKtpUri = uri) } },
+                            onViewImage = onViewPhoto,
+                            testTagPrefix = "foto_ktp"
+                        )
+                    }
 
-                ImagePickerField(
-                    label = "FOTO SURAT PERNYATAAN",
-                    imageUri = formState.fotoSuratPernyataanUri,
-                    onImageSelected = { uri -> onUpdateForm { it.copy(fotoSuratPernyataanUri = uri) } },
-                    onViewImage = onViewPhoto,
-                    testTagPrefix = "foto_surat"
-                )
+                    if (config.formShowFotoSurat) {
+                        ImagePickerField(
+                            label = "FOTO SURAT PERNYATAAN",
+                            imageUri = formState.fotoSuratPernyataanUri,
+                            onImageSelected = { uri -> onUpdateForm { it.copy(fotoSuratPernyataanUri = uri) } },
+                            onViewImage = onViewPhoto,
+                            testTagPrefix = "foto_surat"
+                        )
+                    }
+                }
             }
         }
 

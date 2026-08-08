@@ -1,5 +1,5 @@
 {
-  "name": "DISPERINDAG PAMEKASAN",
+  "name": "SI-PENDATA PASAR",
   "description": "Aplikasi Pendataan Pedagang Pasar Waru Kabupaten Pamekasan - Disperindag Pamekasan",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

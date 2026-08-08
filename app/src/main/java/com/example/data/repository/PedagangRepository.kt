@@ -112,8 +112,17 @@ class PedagangRepository(
     }
 
     // Dynamic Dropdowns
-    fun getOptionsByCategory(category: String): Flow<List<DropdownOption>> =
-        dropdownDao.getOptionsByCategory(category)
+    fun getOptionsByCategory(category: String, onlyVisible: Boolean = true): Flow<List<DropdownOption>> =
+        if (onlyVisible) dropdownDao.getVisibleOptionsByCategory(category)
+        else dropdownDao.getAllOptionsByCategory(category)
+
+    suspend fun updateDropdownOption(option: DropdownOption) {
+        dropdownDao.updateOption(option)
+    }
+
+    suspend fun deleteDropdownOptionById(id: Long) {
+        dropdownDao.deleteById(id)
+    }
 
     suspend fun addDropdownOption(category: String, value: String) {
         if (value.isNotBlank()) {
@@ -135,7 +144,10 @@ class PedagangRepository(
         // Clear all options
         dropdownDao.clearAll()
         
-        // Add new defaults
+        // Prepare a set of unique options per category
+        val optionsMap = mutableMapOf<String, MutableSet<String>>()
+        
+        // Add new defaults (normalized to UPPERCASE)
         val defaultJenisRuang = listOf("TOKO", "KIOS", "SWADAYA", "LOS", "HAMPARAN")
         val defaultKomoditi = listOf(
             "AKSESORIS", "ARLOGI", "BUAH", "DAGING AYAM", "DAGING KAMBING/SAPI",
@@ -144,16 +156,29 @@ class PedagangRepository(
         )
         val defaultStatus = listOf("PEMILIK HAK PAKAI", "SEWA", "BELI", "MILIK KELUARGA", "PENJAGA", "TUTUP", "TAMBAHAN")
 
-        defaultJenisRuang.forEach { addDropdownOption("JENIS_RUANG", it) }
-        defaultKomoditi.forEach { addDropdownOption("KOMODITI", it) }
-        defaultStatus.forEach { addDropdownOption("STATUS", it) }
+        optionsMap.getOrPut("JENIS_RUANG") { mutableSetOf() }.addAll(defaultJenisRuang)
+        optionsMap.getOrPut("KOMODITI") { mutableSetOf() }.addAll(defaultKomoditi)
+        optionsMap.getOrPut("STATUS") { mutableSetOf() }.addAll(defaultStatus)
         
-        // Add existing options from pedagang data
+        // Add existing options from pedagang data (Normalized to UPPERCASE for consistency)
         val allPedagang = pedagangDao.getAllPedagang().first()
-        allPedagang.forEach { pedagang ->
-            addDropdownOption("JENIS_RUANG", pedagang.jenisRuangDagang)
-            addDropdownOption("KOMODITI", pedagang.komoditi)
-            addDropdownOption("STATUS", pedagang.status)
+        allPedagang.forEach { p ->
+            if (p.jenisRuangDagang.isNotBlank()) {
+                optionsMap.getOrPut("JENIS_RUANG") { mutableSetOf() }.add(p.jenisRuangDagang.trim().uppercase())
+            }
+            if (p.komoditi.isNotBlank()) {
+                optionsMap.getOrPut("KOMODITI") { mutableSetOf() }.add(p.komoditi.trim().uppercase())
+            }
+            if (p.status.isNotBlank()) {
+                optionsMap.getOrPut("STATUS") { mutableSetOf() }.add(p.status.trim().uppercase())
+            }
+        }
+        
+        // Insert all collected unique options
+        optionsMap.forEach { (cat, values) ->
+            values.forEach { valStr ->
+                addDropdownOption(cat, valStr)
+            }
         }
     }
     
@@ -183,7 +208,7 @@ class PedagangRepository(
         sb.append("Timestamp,Email Address,NAMA PEDAGANG,NIK,ALAMAT,NOMOR HP,JENIS RUANG DAGANG,NOMOR KIOS/LOS,KOMODITI/JENIS USAHA,LAMA BERJUALAN,STATUS,KETERANGAN,FOTO PEDAGANG,FOTO KTP,FOTO SURAT PERNYATAAN\n")
 
         for (p in list) {
-            sb.append("\"${p.timestamp}\",")
+            sb.append("\"${com.example.data.remote.GoogleSheetSyncService.formatTimestampToGoogleSheet(p.timestamp)}\",")
             sb.append("\"${p.emailAddress}\",")
             sb.append("\"${p.namaPedagang.replace("\"", "\"\"")}\",")
             sb.append("\"${p.nik}\",")

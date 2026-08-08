@@ -60,12 +60,22 @@ fun ActivityUserScreen(
         onRefresh()
     }
 
+    // Grouped and Filtered list
+    val groupedActivities = filteredActivities
+        .sortedByDescending { it.timestamp }
+        .groupBy { 
+            it.timestamp.substringBefore(" ") 
+        }
+    
+    val sortedDates = groupedActivities.keys.toList() // Already sorted descending because of sortedByDescending above
+    var collapsedDates by remember { mutableStateOf(setOf<String>()) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Banner Header
+        // ... (Header remains the same)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -101,15 +111,7 @@ fun ActivityUserScreen(
                     enabled = !isSyncing,
                     colors = IconButtonDefaults.iconButtonColors(contentColor = Color.White)
                 ) {
-                    if (isSyncing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = Color.White,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh data")
-                    }
+                    Icon(Icons.Default.Refresh, contentDescription = "Refresh data")
                 }
             }
         }
@@ -213,166 +215,185 @@ fun ActivityUserScreen(
                     .weight(1f),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                items(filteredActivities.mapIndexed { idx, act -> idx to act }) { (index, activity) ->
-                    val isExpanded = expandedActivityId == index
+                sortedDates.forEach { date ->
+                    val isCollapsed = collapsedDates.contains(date)
+                    val activitiesOnDate = groupedActivities[date] ?: emptyList()
 
-                    // Resolve Activity Color Theme
-                    val (icon, tint) = when {
-                        activity.aktivitas.contains("Tambah", ignoreCase = true) || activity.aktivitas.contains("Daftar", ignoreCase = true) ->
-                            Icons.Default.AddCircle to Color(0xFF2E7D32)
-                        activity.aktivitas.contains("Edit", ignoreCase = true) || activity.aktivitas.contains("Ubah", ignoreCase = true) || activity.aktivitas.contains("Perbarui", ignoreCase = true) ->
-                            Icons.Default.EditCalendar to Color(0xFF1976D2)
-                        activity.aktivitas.contains("Cetak", ignoreCase = true) || activity.aktivitas.contains("PDF", ignoreCase = true) ->
-                            Icons.Default.PictureAsPdf to Color(0xFFC62828)
-                        activity.aktivitas.contains("Hapus", ignoreCase = true) ->
-                            Icons.Default.DeleteForever to Color(0xFFD84315)
-                        else ->
-                            Icons.Default.SyncAlt to Color(0xFFF9A825)
-                    }
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { expandedActivityId = if (isExpanded) null else index }
-                            .padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // Left timeline line & dot
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.width(36.dp)
+                    item(key = date) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    collapsedDates = if (isCollapsed) collapsedDates - date
+                                    else collapsedDates + date
+                                }
+                                .padding(vertical = 8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            shape = RoundedCornerShape(8.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(tint.copy(alpha = 0.12f)),
-                                contentAlignment = Alignment.Center
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.CalendarToday, contentDescription = null, tint = DisperindagGreenPrimary, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = date,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = DisperindagGreenPrimary
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        color = DisperindagGreenPrimary.copy(alpha = 0.1f),
+                                        shape = CircleShape
+                                    ) {
+                                        Text(
+                                            text = activitiesOnDate.size.toString(),
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = DisperindagGreenPrimary,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
                                 Icon(
-                                    imageVector = icon,
+                                    imageVector = if (isCollapsed) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
                                     contentDescription = null,
-                                    tint = tint,
+                                    tint = DisperindagGreenPrimary,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
-
-                            // Connecting timeline line
-                            if (index < filteredActivities.size - 1) {
-                                Box(
-                                    modifier = Modifier
-                                        .width(2.dp)
-                                        .height(70.dp)
-                                        .background(
-                                            Brush.verticalGradient(
-                                                colors = listOf(tint.copy(alpha = 0.4f), Color.LightGray.copy(alpha = 0.2f))
-                                            )
-                                        )
-                                )
-                            }
                         }
+                    }
 
-                        // Right Card content
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isExpanded) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                                else MaterialTheme.colorScheme.surface
-                            ),
-                            elevation = CardDefaults.cardElevation(defaultElevation = if (isExpanded) 1.dp else 0.5.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(bottom = 12.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.Top
+                    if (!isCollapsed) {
+                        items(activitiesOnDate.mapIndexed { idx, act -> "${date}_$idx" to act }, key = { it.first }) { (_, activity) ->
+                            val activityIndex = activities.indexOf(activity)
+                            val isExpanded = expandedActivityId == activityIndex
+
+                            // Resolve Activity Color Theme
+                            val (icon, tint) = when {
+                                activity.aktivitas.contains("Tambah", ignoreCase = true) || activity.aktivitas.contains("Daftar", ignoreCase = true) ->
+                                    Icons.Default.AddCircle to Color(0xFF2E7D32)
+                                activity.aktivitas.contains("Edit", ignoreCase = true) || activity.aktivitas.contains("Ubah", ignoreCase = true) || activity.aktivitas.contains("Perbarui", ignoreCase = true) ->
+                                    Icons.Default.EditCalendar to Color(0xFF1976D2)
+                                activity.aktivitas.contains("Cetak", ignoreCase = true) || activity.aktivitas.contains("PDF", ignoreCase = true) ->
+                                    Icons.Default.PictureAsPdf to Color(0xFFC62828)
+                                activity.aktivitas.contains("Hapus", ignoreCase = true) ->
+                                    Icons.Default.DeleteForever to Color(0xFFD84315)
+                                activity.aktivitas.contains("Logout", ignoreCase = true) || activity.aktivitas.contains("Keluar", ignoreCase = true) ->
+                                    Icons.Default.Logout to Color(0xFF607D8B)
+                                else ->
+                                    Icons.Default.SyncAlt to Color(0xFFF9A825)
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { expandedActivityId = if (isExpanded) null else activityIndex }
+                                    .padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                // Left timeline line & dot
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.width(36.dp)
                                 ) {
-                                    Text(
-                                        text = activity.aktivitas,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = DisperindagGreenPrimary
-                                    )
-                                    Text(
-                                        text = activity.timestamp.substringAfter(" "),
-                                        fontSize = 11.sp,
-                                        color = Color.Gray,
-                                        fontWeight = FontWeight.Medium
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(CircleShape)
+                                            .background(tint.copy(alpha = 0.12f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = icon,
+                                            contentDescription = null,
+                                            tint = tint,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+
+                                    // Connecting timeline line
+                                    Box(
+                                        modifier = Modifier
+                                            .width(1.5.dp)
+                                            .height(if (isExpanded) 120.dp else 60.dp)
+                                            .background(Color.LightGray.copy(alpha = 0.2f))
                                     )
                                 }
 
-                                Spacer(modifier = Modifier.height(4.dp))
-
-                                Text(
-                                    text = activity.namaPetugas,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-
-                                Text(
-                                    text = activity.email,
-                                    fontSize = 10.sp,
-                                    color = Color.Gray
-                                )
-
-                                Spacer(modifier = Modifier.height(6.dp))
-
-                                Text(
-                                    text = activity.keterangan,
-                                    fontSize = 11.5.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = if (isExpanded) 8 else 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                )
-
-                                AnimatedVisibility(
-                                    visible = isExpanded,
-                                    enter = expandVertically() + fadeIn(),
-                                    exit = shrinkVertically() + fadeOut()
+                                // Right Card content
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isExpanded) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                        else MaterialTheme.colorScheme.surface
+                                    ),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = if (isExpanded) 1.dp else 0.5.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(bottom = 8.dp)
                                 ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .padding(top = 8.dp)
-                                            .fillMaxWidth()
-                                    ) {
-                                        HorizontalDivider(thickness = 0.5.dp, color = Color.LightGray.copy(alpha = 0.5f))
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Text(
-                                                text = "Tanggal Lengkap:",
-                                                fontSize = 10.sp,
-                                                color = Color.Gray
-                                            )
-                                            Text(
-                                                text = activity.timestamp,
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                        }
+                                    Column(modifier = Modifier.padding(10.dp)) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.SpaceBetween,
-                                            /* removed duplicate */
+                                            verticalAlignment = Alignment.Top
                                         ) {
                                             Text(
-                                                text = "Metode Log:",
-                                                fontSize = 10.sp,
-                                                color = Color.Gray
+                                                text = activity.aktivitas,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = DisperindagGreenPrimary
                                             )
                                             Text(
-                                                text = "Sinkronisasi Google Sheet Gv1",
+                                                text = activity.timestamp.substringAfter(" "),
                                                 fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = tint
+                                                color = Color.Gray,
+                                                fontWeight = FontWeight.Medium
                                             )
+                                        }
+
+                                        Spacer(modifier = Modifier.height(2.dp))
+
+                                        Text(
+                                            text = activity.namaPetugas,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+
+                                        Spacer(modifier = Modifier.height(4.dp))
+
+                                        Text(
+                                            text = activity.keterangan,
+                                            fontSize = 10.5.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = if (isExpanded) 10 else 2,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                        )
+
+                                        AnimatedVisibility(
+                                            visible = isExpanded,
+                                            enter = expandVertically() + fadeIn(),
+                                            exit = shrinkVertically() + fadeOut()
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .padding(top = 8.dp)
+                                                    .fillMaxWidth()
+                                            ) {
+                                                HorizontalDivider(thickness = 0.5.dp, color = Color.LightGray.copy(alpha = 0.5f))
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                
+                                                InfoRow("Username", activity.email, tint)
+                                                InfoRow("Waktu Log", activity.timestamp, tint)
+                                                InfoRow("Metode", "Cloud Sync GSheet", tint)
+                                            }
                                         }
                                     }
                                 }
@@ -382,5 +403,25 @@ fun ActivityUserScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun InfoRow(label: String, value: String, tint: Color) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = "$label:",
+            fontSize = 9.sp,
+            color = Color.Gray
+        )
+        Text(
+            text = value,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }

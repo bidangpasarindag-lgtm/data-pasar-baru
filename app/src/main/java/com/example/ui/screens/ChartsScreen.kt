@@ -133,10 +133,10 @@ fun ChartsScreen(
                 modifier = Modifier.weight(1f)
             )
             KpiMetricCard(
-                title = "Status Aktif",
-                value = "$activeCount",
-                unit = "${if (totalCount > 0) (activeCount * 100 / totalCount) else 0}% Rasio",
-                icon = Icons.Default.CheckCircle,
+                title = "Jumlah Komoditi",
+                value = "${komoditiMap.size}",
+                unit = "Kategori Usaha",
+                icon = Icons.Default.Category,
                 gradientColors = listOf(Color(0xFFE3F2FD), Color(0xFFBBDEFB)),
                 textColor = Color(0xFF0D47A1),
                 modifier = Modifier.weight(1f)
@@ -496,12 +496,12 @@ fun ChartsScreen(
                 }
 
                 val insight2 = when {
-                    expVeterans > (totalCount * 0.4) ->
-                        "Mayoritas pedagang adalah veteran berdurasi dagang > 10 tahun. Diperlukan program digitalisasi pembayaran digital (QRIS) terfokus untuk modernisasi bertahap."
-                    expNewcomers > (totalCount * 0.3) ->
-                        "Ada masuknya pedagang baru sebesar ${expNewcomers} orang. Disarankan pendampingan permodalan mikro UMKM bekerja sama dengan perbankan daerah."
+                    (topKomoditi?.value ?: 0) > (totalCount * 0.3) ->
+                        "Komoditi '${topKomoditi?.key}' merupakan sektor usaha paling dominan. Disarankan pemetaan zonasi area khusus untuk komoditi ini guna meningkatkan kenyamanan pengunjung."
+                    komoditiMap.size > 10 ->
+                        "Variasi komoditi di pasar sangat beragam (${komoditiMap.size} jenis). Ini menunjukkan ketahanan ekonomi pasar yang baik terhadap fluktuasi harga barang tertentu."
                     else ->
-                        "Komposisi umur usaha pedagang stabil dan seimbang antara pendatang baru dan pelaku usaha senior."
+                        "Distribusi jenis usaha pedagang terpantau stabil dan mencukupi kebutuhan pokok masyarakat sekitar."
                 }
 
                 val insight3 = when {
@@ -708,50 +708,58 @@ fun InteractiveHistogram(
 ) {
     val maxVal = (dataMap.values.maxOrNull() ?: 1).coerceAtLeast(1)
 
-    Row(
+    // Using a Scrollable Row if many categories
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(180.dp)
-            .padding(horizontal = 4.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.Bottom
+            .height(240.dp)
+            .padding(horizontal = 4.dp, vertical = 8.dp)
     ) {
-        dataMap.forEach { (label, count) ->
-            val fraction = count.toFloat() / maxVal.toFloat()
-            val isSelected = label == selectedLabel
-            val barColor = if (isSelected) DisperindagAccentGold else DisperindagGreenPrimary
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.Bottom
+        ) {
+            dataMap.forEach { (label, count) ->
+                val fraction = count.toFloat() / maxVal.toFloat()
+                val isSelected = label == selectedLabel
+                val barColor = if (isSelected) DisperindagAccentGold else DisperindagGreenPrimary
 
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Bottom,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .clickable { onBarSelected(label) }
-                    .padding(horizontal = 2.dp)
-            ) {
-                Text(
-                    text = count.toString(),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = barColor
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Box(
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Bottom,
                     modifier = Modifier
-                        .fillMaxWidth(0.6f)
-                        .fillMaxHeight(fraction.coerceAtLeast(0.08f))
-                        .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
-                        .background(barColor)
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = label.substringBefore(" "),
-                    fontSize = 9.5.sp,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                    maxLines = 1,
-                    color = if (isSelected) DisperindagGreenPrimary else MaterialTheme.colorScheme.onSurface
-                )
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clickable { onBarSelected(label) }
+                        .padding(horizontal = 2.dp)
+                ) {
+                    Text(
+                        text = count.toString(),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = barColor
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.7f)
+                            .fillMaxHeight(fraction.coerceAtLeast(0.08f) * 0.75f) // Reserve space for labels
+                            .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
+                            .background(barColor)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = label,
+                        fontSize = 8.sp,
+                        lineHeight = 9.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 2,
+                        textAlign = TextAlign.Center,
+                        color = if (isSelected) DisperindagGreenPrimary else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.heightIn(min = 20.dp)
+                    )
+                }
             }
         }
     }

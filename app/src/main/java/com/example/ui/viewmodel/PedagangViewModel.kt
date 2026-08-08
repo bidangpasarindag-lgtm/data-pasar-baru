@@ -72,6 +72,7 @@ class PedagangViewModel(application: Application) : AndroidViewModel(application
             if (query.isBlank()) repository.allPedagang
             else repository.searchPedagang(query)
         }
+        .map { list -> list.sortedByDescending { it.timestamp } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Dropdown Options
@@ -86,6 +87,28 @@ class PedagangViewModel(application: Application) : AndroidViewModel(application
     val statusOptions: StateFlow<List<String>> = repository.getOptionsByCategory("STATUS")
         .map { list -> list.map { it.optionValue } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // All Options for Management UI (including hidden ones)
+    val allJenisRuangOptions: StateFlow<List<com.example.data.model.DropdownOption>> = repository.getOptionsByCategory("JENIS_RUANG", onlyVisible = false)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allKomoditiOptions: StateFlow<List<com.example.data.model.DropdownOption>> = repository.getOptionsByCategory("KOMODITI", onlyVisible = false)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allStatusOptions: StateFlow<List<com.example.data.model.DropdownOption>> = repository.getOptionsByCategory("STATUS", onlyVisible = false)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun toggleDropdownVisibility(option: com.example.data.model.DropdownOption) {
+        viewModelScope.launch {
+            repository.updateDropdownOption(option.copy(isVisible = !option.isVisible))
+        }
+    }
+
+    fun deleteDropdownOption(id: Long) {
+        viewModelScope.launch {
+            repository.deleteDropdownOptionById(id)
+        }
+    }
 
     // Selected Pedagang for Detail
     private val _selectedPedagang = MutableStateFlow<Pedagang?>(null)
@@ -108,6 +131,16 @@ class PedagangViewModel(application: Application) : AndroidViewModel(application
 
     private val _lastSyncTime = MutableStateFlow("Belum disinkronkan")
     val lastSyncTime = _lastSyncTime.asStateFlow()
+
+    // Enhanced Progress Reporting
+    private val _syncProgress = MutableStateFlow(-1f)
+    val syncProgress = _syncProgress.asStateFlow()
+
+    private val _syncProcessName = MutableStateFlow("")
+    val syncProcessName = _syncProcessName.asStateFlow()
+
+    private val _syncEstimatedTime = MutableStateFlow("")
+    val syncEstimatedTime = _syncEstimatedTime.asStateFlow()
 
     private val _uiMessage = MutableStateFlow<UiMessage?>(null)
     val uiMessage = _uiMessage.asStateFlow()
@@ -153,9 +186,16 @@ class PedagangViewModel(application: Application) : AndroidViewModel(application
         _uiMessage.value = null
     }
 
+    fun logUserActivity(activity: String, details: String) {
+        viewModelScope.launch {
+            val syncService = com.example.data.remote.GoogleSheetSyncService()
+            syncService.logActivityToSheet(activity, details)
+        }
+    }
+
     // Prepare New Form
     fun initNewForm() {
-        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+        val now = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(Date())
         val userEmail = UserManager.currentUser.value?.email ?: "bidangpasar.indag@gmail.com"
         _formState.value = FormState(
             timestamp = now,
@@ -262,9 +302,13 @@ class PedagangViewModel(application: Application) : AndroidViewModel(application
 
         viewModelScope.launch {
             _isSaving.value = true
+            _syncProgress.value = 0.1f
+            _syncProcessName.value = "Menyiapkan Data..."
+            _syncEstimatedTime.value = "3-5 detik"
+            
             val pedagang = Pedagang(
                 id = f.id,
-                timestamp = if (f.timestamp.isBlank()) SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()) else f.timestamp,
+                timestamp = if (f.timestamp.isBlank()) SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(Date()) else com.example.data.remote.GoogleSheetSyncService.formatTimestampToGoogleSheet(f.timestamp),
                 emailAddress = if (f.emailAddress.isBlank()) (UserManager.currentUser.value?.email ?: "bidangpasar.indag@gmail.com") else f.emailAddress,
                 namaPedagang = f.namaPedagang.trim(),
                 nik = f.nik.trim(),
@@ -282,22 +326,53 @@ class PedagangViewModel(application: Application) : AndroidViewModel(application
                 syncStatus = "SYNCED"
             )
 
+            _syncProgress.value = 0.3f
+            _syncProcessName.value = "Sinkronisasi ke Cloud..."
+            
             if (f.id == 0L) {
                 repository.insertPedagang(pedagang)
+                _syncProgress.value = 0.8f
+                _syncProcessName.value = "Finalisasi..."
+                
                 val nowStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
                 _lastSyncTime.value = "Terakhir: $nowStr (Sync Otomatis)"
                 _uiMessage.value = UiMessage("Data pedagang '${pedagang.namaPedagang}' berhasil disimpan & langsung disinkronkan ke Google Spreadsheet")
+                logUserActivity("Tambah Data Pedagang", "Berhasil mendaftarkan pedagang baru: ${pedagang.namaPedagang}")
             } else {
+                // Fetch old data to see what changed
+                val oldData = pedagangList.value.find { it.id == pedagang.id }
+                val changedFields = mutableListOf<String>()
+                if (oldData != null) {
+                    if (oldData.namaPedagang != pedagang.namaPedagang) changedFields.add("Nama")
+                    if (oldData.nik != pedagang.nik) changedFields.add("NIK")
+                    if (oldData.alamat != pedagang.alamat) changedFields.add("Alamat")
+                    if (oldData.nomorHp != pedagang.nomorHp) changedFields.add("No HP")
+                    if (oldData.jenisRuangDagang != pedagang.jenisRuangDagang) changedFields.add("Jenis Ruang")
+                    if (oldData.nomorKiosLos != pedagang.nomorKiosLos) changedFields.add("No Kios")
+                    if (oldData.komoditi != pedagang.komoditi) changedFields.add("Komoditi")
+                    if (oldData.lamaBerjualan != pedagang.lamaBerjualan) changedFields.add("Lama Berjualan")
+                    if (oldData.status != pedagang.status) changedFields.add("Status")
+                    if (oldData.keterangan != pedagang.keterangan) changedFields.add("Keterangan")
+                }
+                
                 repository.updatePedagang(pedagang)
+                _syncProgress.value = 0.8f
+                _syncProcessName.value = "Finalisasi..."
+
                 val nowStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
                 _lastSyncTime.value = "Terakhir: $nowStr (Sync Otomatis)"
                 _uiMessage.value = UiMessage("Data pedagang '${pedagang.namaPedagang}' berhasil diperbarui & disinkronkan ke Google Spreadsheet")
+                
+                val details = if (changedFields.isEmpty()) "Memperbarui data ${pedagang.namaPedagang}" 
+                             else "Mengubah [${changedFields.joinToString(", ")}] milik ${pedagang.namaPedagang}"
+                logUserActivity("Edit Data Pedagang", details)
             }
 
             if (_selectedPedagang.value?.id == pedagang.id) {
                 _selectedPedagang.value = pedagang
             }
 
+            _syncProgress.value = 1.0f
             _isSaving.value = false
             onSuccess()
         }
@@ -305,18 +380,38 @@ class PedagangViewModel(application: Application) : AndroidViewModel(application
 
     fun deletePedagang(pedagang: Pedagang) {
         viewModelScope.launch {
+            _isSaving.value = true // Reuse isSaving for delete process
+            _syncProgress.value = 0.2f
+            _syncProcessName.value = "Menghapus data di Cloud..."
+            _syncEstimatedTime.value = "2-4 detik"
+            
             repository.deletePedagang(pedagang)
+            
+            _syncProgress.value = 0.9f
+            _syncProcessName.value = "Pembersihan lokal..."
+            
             if (_selectedPedagang.value?.id == pedagang.id) {
                 _selectedPedagang.value = null
             }
             _uiMessage.value = UiMessage("Data pedagang '${pedagang.namaPedagang}' telah dihapus")
+            
+            _syncProgress.value = 1.0f
+            _isSaving.value = false
         }
     }
 
     fun syncWithSpreadsheet() {
         viewModelScope.launch {
             _isSyncing.value = true
+            _syncProgress.value = 0.1f
+            _syncProcessName.value = "Menghubungi Apps Script..."
+            _syncEstimatedTime.value = "5-10 detik"
+            
             val res = repository.syncWithSpreadsheet()
+            
+            _syncProgress.value = 0.7f
+            _syncProcessName.value = "Mengolah Data Spreadsheet..."
+            
             _isSyncing.value = false
 
             if (res.isSuccess) {
@@ -327,6 +422,7 @@ class PedagangViewModel(application: Application) : AndroidViewModel(application
             } else {
                 _uiMessage.value = UiMessage("Gagal koneksi ke Spreadsheet, menggunakan cache lokal", isError = true)
             }
+            _syncProgress.value = 1.0f
         }
     }
 }

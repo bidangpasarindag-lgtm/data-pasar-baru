@@ -54,6 +54,7 @@ fun HeaderBar(
     val isLoggedIn by UserManager.isLoggedIn.collectAsState()
     val agencyConfig by AgencyConfigManager.config.collectAsState()
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var isLoggingOut by remember { mutableStateOf(false) }
 
     val coroutineScope = rememberCoroutineScope()
     var isHeaderExpanded by remember { mutableStateOf(false) }
@@ -158,21 +159,6 @@ fun HeaderBar(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     IconButton(
-                        onClick = onScanQrClick,
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.12f))
-                            .testTag("header_scan_qr_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.QrCodeScanner,
-                            contentDescription = "Scan QR Code Pedagang",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    IconButton(
                         onClick = onSyncClick,
                         enabled = !isSyncing,
                         modifier = Modifier
@@ -195,6 +181,36 @@ fun HeaderBar(
                                 modifier = Modifier.size(20.dp)
                             )
                         }
+                    }
+                    IconButton(
+                        onClick = onScanQrClick,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.12f))
+                            .testTag("header_scan_qr_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.QrCodeScanner,
+                            contentDescription = "Scan QR Code Pedagang",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = { showLogoutDialog = true },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.12f))
+                            .testTag("header_logout_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Logout,
+                            contentDescription = "Keluar",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
             }
@@ -334,7 +350,7 @@ fun HeaderBar(
     // Confirmation Logout Dialog
     if (showLogoutDialog) {
         AlertDialog(
-            onDismissRequest = { showLogoutDialog = false },
+            onDismissRequest = { if (!isLoggingOut) showLogoutDialog = false },
             title = {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -347,35 +363,86 @@ fun HeaderBar(
                         modifier = Modifier.size(24.dp)
                     )
                     Text(
-                        text = "Keluar Aplikasi",
+                        text = if (isLoggingOut) "Proses Keluar..." else "Keluar Aplikasi",
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
             },
             text = {
-                Text(
-                    text = "Apakah Anda yakin ingin keluar dari aplikasi pendataan ini?",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (isLoggingOut) {
+                        Text(
+                            text = "Sedang mencatat aktivitas logout dan memproses keluar...",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.error,
+                            trackColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = MaterialTheme.colorScheme.error,
+                                strokeWidth = 2.dp
+                            )
+                            Text(
+                                text = "Menghubungkan ke Google Spreadsheet...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = "Apakah Anda yakin ingin keluar dari aplikasi pendataan ini?",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        UserManager.logout(context)
-                        showLogoutDialog = false
+                        if (isLoggingOut) return@Button
+                        isLoggingOut = true
+                        val user = UserManager.currentUser.value
+                        val email = user?.email ?: "Unknown"
+                        val name = user?.displayName ?: "Petugas"
+                        
+                        coroutineScope.launch {
+                            val service = com.example.data.remote.GoogleSheetSyncService()
+                            service.logActivityToSheet("Logout", "User keluar dari aplikasi", email, name)
+                            UserManager.logout(context)
+                            isLoggingOut = false
+                            showLogoutDialog = false
+                        }
                     },
+                    enabled = !isLoggingOut,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("Keluar", color = Color.White)
+                    if (isLoggingOut) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Keluar", color = Color.White)
+                    }
                 }
             },
             dismissButton = {
-                TextButton(
-                    onClick = { showLogoutDialog = false }
-                ) {
-                    Text("Batal", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (!isLoggingOut) {
+                    TextButton(
+                        onClick = { showLogoutDialog = false }
+                    ) {
+                        Text("Batal", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         )

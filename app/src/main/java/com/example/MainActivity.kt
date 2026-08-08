@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -108,7 +109,21 @@ fun MainAppContent(viewModel: PedagangViewModel) {
     val komoditiOptions by viewModel.komoditiOptions.collectAsStateWithLifecycle()
     val statusOptions by viewModel.statusOptions.collectAsStateWithLifecycle()
 
+    val syncProgress by viewModel.syncProgress.collectAsStateWithLifecycle()
+    val syncProcessName by viewModel.syncProcessName.collectAsStateWithLifecycle()
+    val syncEstimatedTime by viewModel.syncEstimatedTime.collectAsStateWithLifecycle()
+
     val snackbarHostState = remember { SnackbarHostState() }
+
+    BackHandler(enabled = isFormVisible || selectedPedagang != null || activeTab != MainTab.LIST) {
+        if (isFormVisible) {
+            isFormVisible = false
+        } else if (selectedPedagang != null) {
+            viewModel.selectPedagang(null)
+        } else if (activeTab != MainTab.LIST) {
+            activeTab = MainTab.LIST
+        }
+    }
 
     LaunchedEffect(uiMessage) {
         uiMessage?.let { msg ->
@@ -118,9 +133,22 @@ fun MainAppContent(viewModel: PedagangViewModel) {
     }
 
     ProgressDialog(
-        showDialog = isSaving,
-        title = "Menyimpan Data",
-        message = "Sedang menyimpan dan menyinkronkan data pedagang ke Google Spreadsheet..."
+        showDialog = isSaving || isSyncing || isSyncingActivities,
+        title = when {
+            isSaving -> "Menyimpan Data"
+            isSyncing -> "Sinkronisasi Data"
+            isSyncingActivities -> "Sinkronisasi Aktivitas"
+            else -> "Memuat"
+        },
+        message = when {
+            isSaving -> "Sedang menyimpan dan menyinkronkan data pedagang ke Google Spreadsheet..."
+            isSyncing -> "Mengambil data terbaru dari Google Spreadsheet..."
+            isSyncingActivities -> "Mengambil log aktivitas terbaru..."
+            else -> "Mohon tunggu sebentar..."
+        },
+        progress = syncProgress,
+        processName = syncProcessName,
+        estimatedTime = syncEstimatedTime
     )
 
     if (isFormVisible) {
@@ -152,6 +180,7 @@ fun MainAppContent(viewModel: PedagangViewModel) {
                     .fillMaxSize()
                     .padding(formPadding)
             ) {
+                val currentConfig by AgencyConfigManager.config.collectAsStateWithLifecycle()
                 FormScreen(
                     formState = formState,
                     jenisRuangOptions = jenisRuangOptions,
@@ -164,7 +193,8 @@ fun MainAppContent(viewModel: PedagangViewModel) {
                             isFormVisible = false
                         }
                     },
-                    onViewPhoto = { url -> viewModel.setPreviewImageUrl(url) }
+                    onViewPhoto = { url -> viewModel.setPreviewImageUrl(url) },
+                    config = currentConfig
                 )
 
                 LightboxDialog(
@@ -298,22 +328,34 @@ fun MainAppContent(viewModel: PedagangViewModel) {
                             onRefresh = { viewModel.fetchUserActivities() }
                         )
 
-                        MainTab.SETTINGS -> SettingsScreen(
-                            lastSyncTime = lastSyncTime,
-                            isSyncing = isSyncing,
-                            totalPedagangCount = pedagangList.size,
-                            onSyncClick = { viewModel.syncWithSpreadsheet() },
-                            onRebuildDropdownClick = { viewModel.rebuildDropdownOptions() },
-                            onExportCsvClick = {
-                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_SUBJECT, "Data Pedagang Pasar Waru Pamekasan")
-                                    putExtra(Intent.EXTRA_TEXT, "Data Pedagang Pasar Waru (${pedagangList.size} record) dari Disperindag Kabupaten Pamekasan")
-                                }
-                                context.startActivity(Intent.createChooser(shareIntent, "Bagikan / Export Data"))
-                            },
-                            onSettingsSaved = { activeTab = MainTab.LIST }
-                        )
+                        MainTab.SETTINGS -> {
+                            val allJenisRuangOptions by viewModel.allJenisRuangOptions.collectAsStateWithLifecycle()
+                            val allKomoditiOptions by viewModel.allKomoditiOptions.collectAsStateWithLifecycle()
+                            val allStatusOptions by viewModel.allStatusOptions.collectAsStateWithLifecycle()
+
+                            SettingsScreen(
+                                lastSyncTime = lastSyncTime,
+                                isSyncing = isSyncing,
+                                totalPedagangCount = pedagangList.size,
+                                allJenisRuangOptions = allJenisRuangOptions,
+                                allKomoditiOptions = allKomoditiOptions,
+                                allStatusOptions = allStatusOptions,
+                                onSyncClick = { viewModel.syncWithSpreadsheet() },
+                                onRebuildDropdownClick = { viewModel.rebuildDropdownOptions() },
+                                onToggleDropdownVisibility = { viewModel.toggleDropdownVisibility(it) },
+                                onDeleteDropdownOption = { viewModel.deleteDropdownOption(it) },
+                                onAddDropdownOption = { category, value -> viewModel.addCustomOption(category, value) },
+                                onExportCsvClick = {
+                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_SUBJECT, "Data Pedagang Pasar Waru Pamekasan")
+                                        putExtra(Intent.EXTRA_TEXT, "Data Pedagang Pasar Waru (${pedagangList.size} record) dari Disperindag Kabupaten Pamekasan")
+                                    }
+                                    context.startActivity(Intent.createChooser(shareIntent, "Bagikan / Export Data"))
+                                },
+                                onSettingsSaved = { activeTab = MainTab.LIST }
+                            )
+                        }
                     }
                 }
 

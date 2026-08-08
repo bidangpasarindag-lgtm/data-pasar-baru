@@ -1,6 +1,7 @@
 package com.example.data.remote
 
 import android.util.Log
+import com.example.data.auth.UserManager
 import com.example.data.config.AgencyConfigManager
 import com.example.data.model.Pedagang
 import kotlinx.coroutines.Dispatchers
@@ -116,7 +117,7 @@ class GoogleSheetSyncService {
                 .add("operatorUsername", operatorUsername)
                 .add("operatorName", operatorName)
                 .add("id", pedagang.id.toString())
-                .add("timestamp", pedagang.timestamp)
+                .add("timestamp", formatTimestampToGoogleSheet(pedagang.timestamp))
                 .add("emailAddress", pedagang.emailAddress)
                 .add("namaPedagang", pedagang.namaPedagang)
                 .add("nik", pedagang.nik)
@@ -162,6 +163,38 @@ class GoogleSheetSyncService {
         } catch (e: Exception) {
             Log.e("SheetSync", "Action $action failed direct post", e)
             Result.success(true)
+        }
+    }
+
+    suspend fun logActivityToSheet(
+        activity: String,
+        details: String,
+        operatorUsername: String? = null,
+        operatorName: String? = null
+    ): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val user = UserManager.currentUser.value
+            val targetUrl = currentConfig.webhookUrl
+            val formBody = FormBody.Builder()
+                .add("action", "LOG_ACTIVITY")
+                .add("spreadsheet_id", currentConfig.spreadsheetId)
+                .add("operatorUsername", operatorUsername ?: user?.email ?: "bidangpasar.indag@gmail.com")
+                .add("operatorName", operatorName ?: user?.displayName ?: "Petugas")
+                .add("aktivitas", activity)
+                .add("keterangan", details)
+                .build()
+
+            val request = Request.Builder()
+                .url(targetUrl)
+                .post(formBody)
+                .addHeader("User-Agent", "DisperindagPamekasanApp/1.0")
+                .build()
+
+            val response = client.newCall(request).execute()
+            Result.success(response.isSuccessful)
+        } catch (e: Exception) {
+            Log.e("SheetSync", "Failed to log activity", e)
+            Result.failure(e)
         }
     }
 
@@ -236,7 +269,7 @@ class GoogleSheetSyncService {
 
             val timestamp = getCellByHeaders("Timestamp", "Waktu Input", "Waktu").ifBlank {
                 getCellByIndex(0).ifBlank {
-                    SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+                    SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(Date())
                 }
             }
             val email = getCellByHeaders("Email Address", "Email").ifBlank {
@@ -344,13 +377,38 @@ class GoogleSheetSyncService {
     }
 
     companion object {
+        fun formatTimestampToGoogleSheet(raw: String?): String {
+            if (raw.isNullOrBlank()) {
+                return SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(Date())
+            }
+            val trimmed = raw.trim()
+            if (trimmed.matches(Regex("""^\d{1,2}/\d{1,2}/\d{4}.*"""))) {
+                return trimmed
+            }
+            return try {
+                val parser = when {
+                    trimmed.contains("T") && trimmed.contains(":") -> SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+                    trimmed.contains(":") -> SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                    else -> SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                }
+                val date = parser.parse(trimmed)
+                if (date != null) {
+                    SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(date)
+                } else {
+                    trimmed
+                }
+            } catch (e: Exception) {
+                trimmed
+            }
+        }
+
         fun generateCsvContent(pedagangList: List<Pedagang>): String {
             val sb = StringBuilder()
             // Header row matching standard Apps Script spreadsheet structure
             sb.append("Timestamp,Email Address,NAMA PEDAGANG,NIK,ALAMAT,NOMOR HP,JENIS RUANG DAGANG,NOMOR KIOS/LOS,KOMODITI/JENIS USAHA,LAMA BERJUALAN,STATUS,KETERANGAN,FOTO PEDAGANG,FOTO KTP,FOTO SURAT PERNYATAAN,FOTO PEDAGANG GDRIVE,FOTO KTP GDRIVE,FOTO SURAT PERNYATAAN GDRIVE\n")
             for (p in pedagangList) {
                 val row = listOf(
-                    p.timestamp,
+                    formatTimestampToGoogleSheet(p.timestamp),
                     p.emailAddress,
                     p.namaPedagang,
                     "'${p.nik}",

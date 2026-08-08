@@ -71,6 +71,9 @@ fun DataDetailScreen(
     val (isComplete, missingFields) = agencyConfig.checkCompleteness(pedagang)
     var showDeleteDialog by remember { mutableStateOf(false) }
     var isGeneratingPdf by remember { mutableStateOf(false) }
+    var pdfProgress by remember { mutableFloatStateOf(-1f) }
+    var pdfProcessName by remember { mutableStateOf("") }
+    var pdfEstimatedTime by remember { mutableStateOf("") }
     val fotoPedagangDirect = DriveImageUtils.convertToDirectUrl(pedagang.fotoPedagangUri)
 
     Scaffold(
@@ -89,7 +92,16 @@ fun DataDetailScreen(
                                 context = context,
                                 pedagangList = listOf(pedagang),
                                 fileNamePrefix = "Kartu_${pedagang.namaPedagang}",
-                                onStart = { isGeneratingPdf = true },
+                                onStart = { 
+                                    isGeneratingPdf = true
+                                    pdfProgress = 0f
+                                    pdfProcessName = "Memulai..."
+                                },
+                                onProgress = { progress, name, time ->
+                                    pdfProgress = progress
+                                    pdfProcessName = name
+                                    pdfEstimatedTime = time
+                                },
                                 onComplete = { isGeneratingPdf = false }
                             )
                         },
@@ -409,7 +421,10 @@ fun DataDetailScreen(
         ProgressDialog(
         showDialog = isGeneratingPdf,
         title = "Membuat PDF",
-        message = "Sedang membuat kartu bukti pendataan dan merender dokumen..."
+        message = "Sedang membuat kartu bukti pendataan dan merender dokumen...",
+        progress = pdfProgress,
+        processName = pdfProcessName,
+        estimatedTime = pdfEstimatedTime
     )
 
 

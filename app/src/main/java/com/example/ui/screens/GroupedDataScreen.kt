@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.components.ProgressDialog
 import com.example.data.config.AgencyConfigManager
 import com.example.data.model.Pedagang
 import com.example.ui.theme.DisperindagAccentGold
@@ -41,10 +42,15 @@ fun GroupedDataScreen(
     onDeletePedagang: (Pedagang) -> Unit = {},
     onViewPhoto: (String) -> Unit
 ) {
+    val context = LocalContext.current
     val agencyConfig by AgencyConfigManager.config.collectAsState()
 
     var selectedSortOption by remember { mutableStateOf("Nama (A-Z)") }
     var isSortMenuExpanded by remember { mutableStateOf(false) }
+    var isGeneratingPdf by remember { mutableStateOf(false) }
+    var pdfProgress by remember { mutableFloatStateOf(-1f) }
+    var pdfProcessName by remember { mutableStateOf("") }
+    var pdfEstimatedTime by remember { mutableStateOf("") }
 
     val sortOptions = listOf(
         "Nama (A-Z)",
@@ -195,12 +201,39 @@ fun GroupedDataScreen(
                         onPedagangClick = onPedagangClick,
                         onEditPedagang = onEditPedagang,
                         onDeletePedagang = onDeletePedagang,
-                        onViewPhoto = onViewPhoto
+                        onViewPhoto = onViewPhoto,
+                        onPdfExport = { items ->
+                            PdfExportUtils.generateAndOpenPdf(
+                                context = context,
+                                pedagangList = items,
+                                fileNamePrefix = "Batch_${groupTitle}",
+                                onStart = { 
+                                    isGeneratingPdf = true
+                                    pdfProgress = 0f
+                                    pdfProcessName = "Memulai Cetak Batch Kelompok..."
+                                },
+                                onProgress = { progress, name, time ->
+                                    pdfProgress = progress
+                                    pdfProcessName = name
+                                    pdfEstimatedTime = time
+                                },
+                                onComplete = { isGeneratingPdf = false }
+                            )
+                        }
                     )
                 }
             }
         }
     }
+
+    ProgressDialog(
+        showDialog = isGeneratingPdf,
+        title = "Membuat PDF Kelompok",
+        message = "Sedang merender dokumen untuk kelompok ini...",
+        progress = pdfProgress,
+        processName = pdfProcessName,
+        estimatedTime = pdfEstimatedTime
+    )
 }
 
 @Composable
@@ -210,7 +243,8 @@ fun GroupExpandableCard(
     onPedagangClick: (Pedagang) -> Unit,
     onEditPedagang: (Pedagang) -> Unit,
     onDeletePedagang: (Pedagang) -> Unit,
-    onViewPhoto: (String) -> Unit
+    onViewPhoto: (String) -> Unit,
+    onPdfExport: (List<Pedagang>) -> Unit
 ) {
     var expanded by remember { mutableStateOf(true) }
 
@@ -249,15 +283,8 @@ fun GroupExpandableCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val context = LocalContext.current
                     IconButton(
-                        onClick = {
-                            PdfExportUtils.generateAndOpenPdf(
-                                context = context,
-                                pedagangList = items,
-                                fileNamePrefix = "Batch_${groupTitle}"
-                            )
-                        },
+                        onClick = { onPdfExport(items) },
                         modifier = Modifier
                             .size(32.dp)
                             .testTag("batch_pdf_button_${groupTitle}")

@@ -238,7 +238,51 @@ fun LoginScreen(
                         )
                     )
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    if (isLoading) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp,
+                                        color = DisperindagGreenPrimary
+                                    )
+                                    Text(
+                                        text = "Memproses Login...",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                                LinearProgressIndicator(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = DisperindagGreenPrimary,
+                                    trackColor = MaterialTheme.colorScheme.primaryContainer
+                                )
+                                Text(
+                                    text = "Sedang memverifikasi akun ke Google Spreadsheet...",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
 
                     // Sign In Button
                     Button(
@@ -289,30 +333,263 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Icon-only Webhook settings button
-            IconButton(
-                onClick = { showSettings = true },
-                modifier = Modifier
-                    .size(48.dp)
-                    .background(
-                        color = DisperindagGreenPrimary.copy(alpha = 0.1f),
-                        shape = CircleShape
-                    )
-                    .testTag("login_settings_icon_button")
+            // Icons for Settings and Guide
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "Pengaturan Webhook",
-                    tint = DisperindagGreenPrimary,
-                    modifier = Modifier.size(24.dp)
-                )
+                // Webhook settings button
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(
+                        onClick = { showSettings = true },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(
+                                color = DisperindagGreenPrimary.copy(alpha = 0.1f),
+                                shape = CircleShape
+                            )
+                            .testTag("login_settings_icon_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Pengaturan Webhook",
+                            tint = DisperindagGreenPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Text(
+                        text = "Pengaturan",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+
+                var showGuide by remember { mutableStateOf(false) }
+                // User Guide button
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(
+                        onClick = { showGuide = true },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(
+                                color = Color(0xFFE2E8F0),
+                                shape = CircleShape
+                            )
+                            .testTag("login_guide_icon_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.HelpCenter,
+                            contentDescription = "Panduan Penggunaan",
+                            tint = Color(0xFF475569),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Text(
+                        text = "Panduan",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+
+                if (showGuide) {
+                    AlertDialog(
+                        onDismissRequest = { showGuide = false },
+                        title = {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(Icons.Default.MenuBook, contentDescription = null, tint = DisperindagGreenPrimary)
+                                Text("Panduan Penggunaan Aplikasi", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        text = {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 450.dp)
+                                    .verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                GuideSection(
+                                    title = "1. Download Template Spreadsheet (.XLSX)",
+                                    content = "Gunakan tombol di bawah untuk mengunduh template spreadsheet penuh dalam format Excel (.xlsx). File ini sudah mencakup semua sheet yang diperlukan: 'Form Responses 1', 'username', dan 'aktivitas user'."
+                                )
+                                
+                                Button(
+                                    onClick = {
+                                        val file = com.example.util.FileExportUtils.downloadTemplateSpreadsheetXlsx(context)
+                                        if (file != null) {
+                                            android.widget.Toast.makeText(context, "Template XLSX berhasil diunduh ke: ${file.absolutePath}", android.widget.Toast.LENGTH_LONG).show()
+                                            com.example.util.FileExportUtils.openFile(context, file)
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Download Template (.XLSX)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color(0xFFE2E8F0), RoundedCornerShape(8.dp))
+                                        .padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Info, contentDescription = null, tint = Color(0xFF475569), modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "User Default: tim.pendata@ubed.com\nPassword: .",
+                                        fontSize = 10.sp,
+                                        color = Color(0xFF475569),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    TextButton(
+                                        onClick = {
+                                            username = "tim.pendata@ubed.com"
+                                            password = "."
+                                            showGuide = false
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("Gunakan Login", fontSize = 10.sp, color = DisperindagGreenPrimary, fontWeight = FontWeight.ExtraBold)
+                                    }
+                                }
+
+                                GuideSection(
+                                    title = "2. Salin Kode Script Backend",
+                                    content = "Buka 'Extensions' > 'Apps Script' di Spreadsheet Anda, hapus semua kode lama, lalu tempel kode berikut ini. Pastikan Anda klik 'Deploy' > 'New Deployment' setelahnya."
+                                )
+
+                                var isCodeExpanded by remember { mutableStateOf(false) }
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                                    border = androidx.compose.foundation.BorderStroke(0.5.dp, Color.LightGray),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(8.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().clickable { isCodeExpanded = !isCodeExpanded },
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text("Google Apps Script Code (doPostAndroid.gs)", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                            Icon(if (isCodeExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null)
+                                        }
+                                        
+                                        if (isCodeExpanded) {
+                                            val fullCode = com.example.util.AppsScriptUtils.LATEST_CODE
+                                            val changelogText = com.example.util.AppsScriptUtils.CHANGELOG
+
+                                            val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+                                            val annotatedString = androidx.compose.ui.text.buildAnnotatedString { append(fullCode) }
+                                            
+                                            // Changelog Section
+                                            Surface(
+                                                color = Color(0xFFEFF6FF),
+                                                shape = RoundedCornerShape(8.dp),
+                                                border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFFBFDBFE)),
+                                                modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 6.dp)
+                                            ) {
+                                                Column(modifier = Modifier.padding(8.dp)) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                    ) {
+                                                        Icon(Icons.Default.History, contentDescription = null, tint = DisperindagGreenPrimary, modifier = Modifier.size(14.dp))
+                                                        Text("Changelog Apps Script (${com.example.util.AppsScriptUtils.VERSION})", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = DisperindagGreenPrimary)
+                                                    }
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                    Text(
+                                                        text = changelogText.trim(),
+                                                        fontSize = 8.5.sp,
+                                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                                        color = Color.DarkGray
+                                                    )
+                                                }
+                                            }
+
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Button(
+                                                    onClick = { clipboardManager.setText(annotatedString) },
+                                                    modifier = Modifier.weight(1f),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    colors = ButtonDefaults.buttonColors(containerColor = DisperindagGreenPrimary)
+                                                ) {
+                                                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text("Salin Kode", fontSize = 10.sp)
+                                                }
+
+                                                Button(
+                                                    onClick = {
+                                                        val file = com.example.util.FileExportUtils.saveAppsScriptAsTxt(context, fullCode)
+                                                        if (file != null) {
+                                                            android.widget.Toast.makeText(context, "Script disimpan di: ${file.absolutePath}", android.widget.Toast.LENGTH_LONG).show()
+                                                            com.example.util.FileExportUtils.openFile(context, file)
+                                                        }
+                                                    },
+                                                    modifier = Modifier.weight(1f),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                                                ) {
+                                                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text("Download .TXT", fontSize = 10.sp)
+                                                }
+                                            }
+                                            
+                                            Text(
+                                                text = fullCode,
+                                                fontSize = 9.sp,
+                                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                                color = Color.DarkGray,
+                                                modifier = Modifier.padding(top = 8.dp).heightIn(max = 200.dp).verticalScroll(rememberScrollState())
+                                            )
+                                        }
+                                    }
+                                }
+
+                                GuideSection(
+                                    title = "3. Konfigurasi Aplikasi",
+                                    content = "Di halaman Login ini, klik icon 'Pengaturan'. Masukkan URL Web App dari langkah 2 ke kolom 'URL Webhook' dan ID Spreadsheet Anda (ada di URL browser spreadsheet) ke kolom 'Spreadsheet ID'. Klik 'Tes Koneksi' untuk memastikan data terhubung."
+                                )
+                                GuideSection(
+                                    title = "4. Manajemen User & Login",
+                                    content = "Tambahkan data pengguna di sheet 'username' dengan kolom Username (Email), Password, dan DisplayName. Gunakan akun tersebut untuk masuk ke aplikasi ini."
+                                )
+                                GuideSection(
+                                    title = "5. Pendataan Pedagang",
+                                    content = "Setelah masuk, Anda dapat menambah data pedagang baru. Data akan disimpan secara lokal terlebih dahulu jika tidak ada internet, dan dapat disinkronkan ke Spreadsheet nanti."
+                                )
+                                GuideSection(
+                                    title = "6. Export PDF & Cetak Kartu",
+                                    content = "Data yang sudah masuk dapat diekspor menjadi PDF pendataan atau dicetak sebagai kartu identitas pedagang langsung dari aplikasi."
+                                )
+                                GuideSection(
+                                    title = "7. Pengaturan Dinamis",
+                                    content = "Gunakan menu Pengaturan di dalam aplikasi untuk mengubah judul aplikasi, logo, label PDF, hingga mengatur opsi pilihan dropdown agar sesuai dengan kebutuhan pasar Anda."
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = { showGuide = false },
+                                colors = ButtonDefaults.buttonColors(containerColor = DisperindagGreenPrimary)
+                            ) {
+                                Text("Mengerti")
+                            }
+                        }
+                    )
+                }
             }
-            Text(
-                text = "Pengaturan Webhook & Spreadsheet",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                modifier = Modifier.padding(top = 8.dp)
-            )
 
             Spacer(modifier = Modifier.height(24.dp))
         }
@@ -535,5 +812,24 @@ fun LoginScreen(
                 }
             )
         }
+    }
+}
+
+@Composable
+fun GuideSection(title: String, content: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = DisperindagGreenPrimary
+        )
+        Text(
+            text = content,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Justify,
+            lineHeight = 16.sp
+        )
     }
 }

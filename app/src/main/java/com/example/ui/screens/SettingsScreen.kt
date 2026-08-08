@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -47,8 +48,15 @@ import com.example.data.model.Pedagang
 import com.example.data.remote.GoogleSheetSyncService
 import com.example.ui.theme.DisperindagAccentGold
 import com.example.ui.theme.DisperindagGreenPrimary
+import com.example.util.AppStorageUtils
 import com.example.util.DriveImageUtils
+import com.example.util.FileExportUtils
 import com.example.util.QrCodeUtils
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 
@@ -58,22 +66,72 @@ fun SettingsScreen(
     lastSyncTime: String,
     isSyncing: Boolean,
     totalPedagangCount: Int,
+    allJenisRuangOptions: List<com.example.data.model.DropdownOption> = emptyList(),
+    allKomoditiOptions: List<com.example.data.model.DropdownOption> = emptyList(),
+    allStatusOptions: List<com.example.data.model.DropdownOption> = emptyList(),
     onSyncClick: () -> Unit,
     onExportCsvClick: () -> Unit,
     onRebuildDropdownClick: () -> Unit,
+    onToggleDropdownVisibility: (com.example.data.model.DropdownOption) -> Unit = {},
+    onDeleteDropdownOption: (Long) -> Unit = {},
+    onAddDropdownOption: (String, String) -> Unit = { _, _ -> },
     onSettingsSaved: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-        val currentConfig by AgencyConfigManager.config.collectAsState()
+    val currentConfig by AgencyConfigManager.config.collectAsState()
     var stateConfig by androidx.compose.runtime.remember(currentConfig) { androidx.compose.runtime.mutableStateOf(currentConfig) }
     var isSavingSettings by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    var activeTab by remember { mutableStateOf("cloud") } // "cloud", "pdf", "sistem"
+    var activeTab by remember { mutableStateOf("cloud") } // "cloud", "pdf", "form", "storage", "sistem"
 
     var showResetDialog by remember { mutableStateOf(false) }
     var isTestingConnection by remember { mutableStateOf(false) }
     var connectionResult by remember { mutableStateOf<String?>(null) }
     var showGuide by remember { mutableStateOf(false) }
+
+    var lastBackupFile by remember { mutableStateOf<File?>(null) }
+    var showBackupSuccessDialog by remember { mutableStateOf(false) }
+
+    // Helper for Styled Headers
+    @Composable
+    fun SectionHeader(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector? = null, color: Color = DisperindagGreenPrimary) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(color.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+                .padding(vertical = 12.dp, horizontal = 14.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (icon != null) {
+                    Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
+                }
+                Text(
+                    text = title.uppercase(),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = color,
+                    letterSpacing = 0.8.sp
+                )
+            }
+        }
+    }
+
+    @Composable
+    fun SubSectionHeader(title: String, color: Color = DisperindagGreenPrimary) {
+        Surface(
+            color = color.copy(alpha = 0.05f),
+            shape = RoundedCornerShape(4.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp)
+        ) {
+            Text(
+                text = title,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                color = color,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+            )
+        }
+    }
 
     // Helper url parsing functions
     fun parseSpreadsheetUrl(input: String) {
@@ -128,14 +186,22 @@ fun SettingsScreen(
             try {
                 val inputStream = context.contentResolver.openInputStream(it)
                 val jsonString = inputStream?.bufferedReader().use { r -> r?.readText() } ?: ""
-                val result = AgencyConfigManager.importConfigFromJson(context, jsonString)
-                if (result.isSuccess) {
-                    Toast.makeText(context, "✓ Konfigurasi aplikasi berhasil dipulihkan!", Toast.LENGTH_LONG).show()
+                if (jsonString.isNotBlank()) {
+                    val result = AgencyConfigManager.importConfigFromJson(context, jsonString)
+                    if (result.isSuccess) {
+                        val imported = result.getOrNull()
+                        if (imported != null) {
+                            stateConfig = imported
+                        }
+                        Toast.makeText(context, "✓ Konfigurasi aplikasi berhasil dipulihkan!", Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(context, "❌ Format JSON konfigurasi tidak valid", Toast.LENGTH_LONG).show()
+                    }
                 } else {
-                    Toast.makeText(context, "❌ Gagal merestore JSON konfigurasi", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "❌ File JSON kosong", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Error restore: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -212,7 +278,9 @@ fun SettingsScreen(
                 selectedTabIndex = when (activeTab) {
                     "cloud" -> 0
                     "pdf" -> 1
-                    else -> 2
+                    "form" -> 2
+                    "storage" -> 3
+                    else -> 4
                 },
                 containerColor = MaterialTheme.colorScheme.surface,
                 contentColor = DisperindagGreenPrimary,
@@ -221,7 +289,9 @@ fun SettingsScreen(
                         Modifier.tabIndicatorOffset(tabPositions[when (activeTab) {
                             "cloud" -> 0
                             "pdf" -> 1
-                            else -> 2
+                            "form" -> 2
+                            "storage" -> 3
+                            else -> 4
                         }]),
                         color = DisperindagGreenPrimary
                     )
@@ -233,7 +303,7 @@ fun SettingsScreen(
                     text = {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(Icons.Default.CloudSync, contentDescription = null, sizeModifier(activeTab == "cloud"))
-                            Text("Cloud & Sync", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("Cloud", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 )
@@ -243,7 +313,27 @@ fun SettingsScreen(
                     text = {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(Icons.Default.PictureAsPdf, contentDescription = null, sizeModifier(activeTab == "pdf"))
-                            Text("Desain & PDF", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("PDF", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                )
+                Tab(
+                    selected = activeTab == "form",
+                    onClick = { activeTab = "form" },
+                    text = {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.Assignment, contentDescription = null, sizeModifier(activeTab == "form"))
+                            Text("Form", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                )
+                Tab(
+                    selected = activeTab == "storage",
+                    onClick = { activeTab = "storage" },
+                    text = {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.FolderSpecial, contentDescription = null, sizeModifier(activeTab == "storage"))
+                            Text("Storage", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 )
@@ -253,7 +343,7 @@ fun SettingsScreen(
                     text = {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(Icons.Default.Tune, contentDescription = null, sizeModifier(activeTab == "sistem"))
-                            Text("Sistem & Aturan", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("Sistem", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 )
@@ -270,12 +360,7 @@ fun SettingsScreen(
                 when (activeTab) {
                     "cloud" -> {
                         // TAB 1: CLOUD & GOOGLE SHEET SYNCHRONIZATION
-                        Text(
-                            text = "KONEKTIVITAS CLOUD & GOOGLE SPREADSHEET",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = DisperindagGreenPrimary
-                        )
+                        SectionHeader("KONEKTIVITAS CLOUD & GOOGLE SPREADSHEET", Icons.Default.CloudSync, color = Color(0xFF2E7D32))
 
                         Card(
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -285,7 +370,7 @@ fun SettingsScreen(
                                 modifier = Modifier.padding(14.dp),
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                // Spreadsheet ID Input
+                                SubSectionHeader("Integrasi Google Spreadsheet", color = Color(0xFF2E7D32))
                                 OutlinedTextField(
                                     value = stateConfig.spreadsheetId,
                                     onValueChange = { parseSpreadsheetUrl(it) },
@@ -433,307 +518,35 @@ fun SettingsScreen(
                                 }
 
                                 AnimatedVisibility(visible = isCodeExpanded) {
-                                    val fullAppsScriptCode = """
-/**
- * GOOGLE APPS SCRIPT INTEGRASI PENDATAAN PASAR WARU
- * Dinas Perindustrian dan Perdagangan Kabupaten Pamekasan
- */
-
-function doPost(e) {
-  try {
-    var params = e.parameter;
-    var action = params.action || "CREATE";
-    var ssId = params.spreadsheet_id || "1Q7OtJ1fuEwkycAtnAjRNrSNrAEJ5SxjGRn-ge9YcWlU";
-    var gid = params.sheetGid || "1751220302";
-    
-    if (action === "PING") {
-      return ContentService.createTextOutput("PONG_OK");
-    }
-    
-    var ss = SpreadsheetApp.openById(ssId);
-    
-    // LOGIN ACTION
-    if (action === "LOGIN") {
-      var username = (params.username || "").toString().trim().toLowerCase();
-      var password = (params.password || "").toString().trim();
-      
-      var userSheet = ss.getSheetByName("username");
-      if (!userSheet) {
-        return ContentService.createTextOutput(JSON.stringify({
-          status: "ERROR",
-          message: "Sheet 'username' tidak ditemukan di Google Spreadsheet!"
-        })).setMimeType(ContentService.MimeType.JSON);
-      }
-      
-      var userData = userSheet.getDataRange().getValues();
-      for (var i = 1; i < userData.length; i++) {
-        var rowUser = (userData[i][0] || "").toString().trim().toLowerCase();
-        var rowPass = (userData[i][1] || "").toString().trim();
-        var displayName = (userData[i][2] || "").toString().trim();
-        
-        if (rowUser === username && rowPass === password) {
-          // Update last login
-          var now = Utilities.formatDate(new Date(), "GMT+7", "yyyy-MM-dd HH:mm:ss");
-          userSheet.getRange(i + 1, 4).setValue(now);
-          
-          // Log activity
-          logActivity(ss, username, displayName, "LOGIN", "Login berhasil ke aplikasi");
-          
-          return ContentService.createTextOutput(JSON.stringify({
-            status: "SUCCESS",
-            username: username,
-            displayName: displayName
-          })).setMimeType(ContentService.MimeType.JSON);
-        }
-      }
-      
-      return ContentService.createTextOutput(JSON.stringify({
-        status: "ERROR",
-        message: "Username atau Password salah."
-      })).setMimeType(ContentService.MimeType.JSON);
-    }
-    
-    // Other actions (CREATE, UPDATE, DELETE)
-    var sheet = getSheetByGid(ss, gid) || ss.getSheets()[0];
-    
-    // Auto Save Base64 Photos to Google Drive
-    var driveFolderId = params.driveFolderId || "1G81CN0555Gst93hIosHG0lrUf4pP0ELO";
-    var folder = DriveApp.getFolderById(driveFolderId);
-    
-    // Parse timestamp or get current time for YYYYMMDD and JAM (HHmmss)
-    var dateObj = new Date();
-    if (params.timestamp) {
-      try {
-        var tParts = params.timestamp.split(" ");
-        if (tParts.length >= 2) {
-          var dParts = tParts[0].split("-");
-          var hParts = tParts[1].split(":");
-          if (dParts.length === 3 && hParts.length === 3) {
-            dateObj = new Date(
-              parseInt(dParts[0], 10),
-              parseInt(dParts[1], 10) - 1,
-              parseInt(dParts[2], 10),
-              parseInt(hParts[0], 10),
-              parseInt(hParts[1], 10),
-              parseInt(hParts[2], 10)
-            );
-          }
-        }
-      } catch (e) {
-        // Fallback
-      }
-    }
-    
-    // Format YYYYMMDD
-    var year = dateObj.getFullYear();
-    var month = ("0" + (dateObj.getMonth() + 1)).slice(-2);
-    var date = ("0" + dateObj.getDate()).slice(-2);
-    var yyyymmdd = "" + year + month + date;
-    
-    // Format JAM as HHmmss
-    var hours = ("0" + dateObj.getHours()).slice(-2);
-    var minutes = ("0" + dateObj.getMinutes()).slice(-2);
-    var seconds = ("0" + dateObj.getSeconds()).slice(-2);
-    var jam = "" + hours + minutes + seconds;
-    
-    var sanitizedNama = (params.namaPedagang || "PEDAGANG").replace(/[^a-zA-Z0-9\s-_]/g, "").trim();
-    
-    var fotoPedagangName = "";
-    var fotoKtpName = "";
-    var fotoSuratName = "";
-    
-    var fotoPedagangUrl = params.fotoPedagangUri || "";
-    var fotoKtpUrl = params.fotoKtpUri || "";
-    var fotoSuratUrl = params.fotoSuratPernyataanUri || "";
-    
-    // If UPDATE, pull existing values first to preserve old filenames/links if not updated
-    if (action === "UPDATE") {
-      var targetRow = findRowByNameOrNik(sheet, params.namaPedagang, params.nik);
-      if (targetRow > 0) {
-        var existingRowData = sheet.getRange(targetRow, 1, 1, 18).getValues()[0];
-        if (existingRowData.length >= 18) {
-          fotoPedagangName = existingRowData[12] || "";
-          fotoKtpName = existingRowData[13] || "";
-          fotoSuratName = existingRowData[14] || "";
-          
-          fotoPedagangUrl = existingRowData[15] || "";
-          fotoKtpUrl = existingRowData[16] || "";
-          fotoSuratUrl = existingRowData[17] || "";
-        }
-      }
-    }
-    
-    // Delete existing photos if explicitly deleted or updated
-    if (action === "UPDATE") {
-      if (params.isDeleteFotoPedagang === "true" && fotoPedagangUrl) {
-        deleteFileByUrl(fotoPedagangUrl);
-        fotoPedagangName = "";
-        fotoPedagangUrl = "";
-      }
-      if (params.isDeleteFotoKtp === "true" && fotoKtpUrl) {
-        deleteFileByUrl(fotoKtpUrl);
-        fotoKtpName = "";
-        fotoKtpUrl = "";
-      }
-      if (params.isDeleteFotoSurat === "true" && fotoSuratUrl) {
-        deleteFileByUrl(fotoSuratUrl);
-        fotoSuratName = "";
-        fotoSuratUrl = "";
-      }
-    }
-    
-    // Upload FOTO PEDAGANG
-    if (params.fotoPedagangBase64) {
-      if (fotoPedagangUrl) {
-        deleteFileByUrl(fotoPedagangUrl);
-      }
-      var fName = yyyymmdd + "-FOTO PEDAGANG-" + jam + "-" + sanitizedNama + ".jpg";
-      var file = folder.createFile(Utilities.newBlob(Utilities.base64Decode(params.fotoPedagangBase64), "image/jpeg", fName));
-      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      fotoPedagangUrl = file.getUrl();
-      fotoPedagangName = "Form Responses 1_Images/" + fName;
-    }
-    
-    // Upload FOTO KTP
-    if (params.fotoKtpBase64) {
-      if (fotoKtpUrl) {
-        deleteFileByUrl(fotoKtpUrl);
-      }
-      var fNameKtp = yyyymmdd + "-FOTO KTP-" + jam + "-" + sanitizedNama + ".jpg";
-      var fileKtp = folder.createFile(Utilities.newBlob(Utilities.base64Decode(params.fotoKtpBase64), "image/jpeg", fNameKtp));
-      fileKtp.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      fotoKtpUrl = fileKtp.getUrl();
-      fotoKtpName = "Form Responses 1_Images/" + fNameKtp;
-    }
-    
-    // Upload FOTO SURAT PERNYATAAN
-    if (params.fotoSuratBase64) {
-      if (fotoSuratUrl) {
-        deleteFileByUrl(fotoSuratUrl);
-      }
-      var fNameSurat = yyyymmdd + "-FOTO SURAT PERNYATAAN-" + jam + "-" + sanitizedNama + ".jpg";
-      var fileSurat = folder.createFile(Utilities.newBlob(Utilities.base64Decode(params.fotoSuratBase64), "image/jpeg", fNameSurat));
-      fileSurat.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      fotoSuratUrl = fileSurat.getUrl();
-      fotoSuratName = "Form Responses 1_Images/" + fNameSurat;
-    }
-    
-    var rowData = [
-      params.timestamp || new Date(),
-      params.emailAddress || "bidangpasar.indag@gmail.com",
-      params.namaPedagang,
-      "'" + params.nik,
-      params.alamat,
-      "'" + params.nomorHp,
-      params.jenisRuangDagang,
-      params.nomorKiosLos,
-      params.komoditi,
-      params.lamaBerjualan,
-      params.status,
-      params.keterangan,
-      fotoPedagangName, // Column M (13)
-      fotoKtpName,      // Column N (14)
-      fotoSuratName,    // Column O (15)
-      fotoPedagangUrl,  // Column P (16)
-      fotoKtpUrl,       // Column Q (17)
-      fotoSuratUrl      // Column R (18)
-    ];
-    
-    var operatorEmail = params.emailAddress || "bidangpasar.indag@gmail.com";
-    var operatorName = params.operatorName || "Petugas";
-    
-    if (action === "CREATE") {
-      sheet.appendRow(rowData);
-      logActivity(ss, operatorEmail, operatorName, "TAMBAH_PEDAGANG", "Menambah pedagang baru: " + params.namaPedagang);
-    } else if (action === "UPDATE") {
-      var targetRow = findRowByNameOrNik(sheet, params.namaPedagang, params.nik);
-      if (targetRow > 0) {
-        sheet.getRange(targetRow, 1, 1, rowData.length).setValues([rowData]);
-        logActivity(ss, operatorEmail, operatorName, "EDIT_PEDAGANG", "Mengubah data pedagang: " + params.namaPedagang);
-      } else {
-        sheet.appendRow(rowData);
-        logActivity(ss, operatorEmail, operatorName, "TAMBAH_PEDAGANG", "Menambah pedagang baru (karena update tidak ditemukan): " + params.namaPedagang);
-      }
-    } else if (action === "DELETE") {
-      var targetRowDel = findRowByNameOrNik(sheet, params.namaPedagang, params.nik);
-      if (targetRowDel > 0) {
-        var existingRowData = sheet.getRange(targetRowDel, 1, 1, 18).getValues()[0];
-        if (existingRowData.length >= 18) {
-          var delFotoPedagangUrl = existingRowData[15] || "";
-          var delFotoKtpUrl = existingRowData[16] || "";
-          var delFotoSuratUrl = existingRowData[17] || "";
-          
-          if (delFotoPedagangUrl) deleteFileByUrl(delFotoPedagangUrl);
-          if (delFotoKtpUrl) deleteFileByUrl(delFotoKtpUrl);
-          if (delFotoSuratUrl) deleteFileByUrl(delFotoSuratUrl);
-        }
-        sheet.deleteRow(targetRowDel);
-        logActivity(ss, operatorEmail, operatorName, "HAPUS_PEDAGANG", "Menghapus data pedagang: " + params.namaPedagang);
-      }
-    }
-    
-    return ContentService.createTextOutput(JSON.stringify({status: "SUCCESS", action: action}))
-      .setMimeType(ContentService.MimeType.JSON);
-  } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({status: "ERROR", message: err.toString()}))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}
-
-function logActivity(ss, email, name, action, details) {
-  try {
-    var actSheet = ss.getSheetByName("aktivitas user");
-    if (!actSheet) {
-      actSheet = ss.insertSheet("aktivitas user");
-      actSheet.appendRow(["Timestamp", "Email", "Nama Petugas", "Aktivitas", "Keterangan"]);
-    }
-    var now = Utilities.formatDate(new Date(), "GMT+7", "yyyy-MM-dd HH:mm:ss");
-    actSheet.appendRow([now, email, name, action, details]);
-  } catch (e) {
-    // ignore logging error
-  }
-}
-
-function getSheetByGid(ss, gid) {
-  var sheets = ss.getSheets();
-  for (var i = 0; i < sheets.length; i++) {
-    if (sheets[i].getSheetId().toString() === gid.toString()) {
-      return sheets[i];
-    }
-  }
-  return null;
-}
-
-function findRowByNameOrNik(sheet, nama, nik) {
-  var data = sheet.getDataRange().getValues();
-  for (var i = 1; i < data.length; i++) {
-    if ((data[i][2] && data[i][2].toString().toLowerCase() === nama.toLowerCase()) ||
-        (data[i][3] && data[i][3].toString().replace("'", "") === nik.toString().replace("'", ""))) {
-      return i + 1;
-    }
-  }
-  return -1;
-}
-
-function extractFileId(url) {
-  if (!url) return null;
-  var match = url.match(/[-\w]{25,}/);
-  return match ? match[0] : null;
-}
-
-function deleteFileByUrl(url) {
-  try {
-    var fileId = extractFileId(url);
-    if (fileId) {
-      DriveApp.getFileById(fileId).setTrashed(true);
-    }
-  } catch (e) {
-    // ignore
-  }
-}
-                                    """.trimIndent()
+                                    val fullAppsScriptCode = com.example.util.AppsScriptUtils.LATEST_CODE
+                                    val changelogText = com.example.util.AppsScriptUtils.CHANGELOG
 
                                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        // Changelog Section
+                                        Surface(
+                                            color = Color(0xFFEFF6FF),
+                                            shape = RoundedCornerShape(8.dp),
+                                            border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFFBFDBFE)),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Column(modifier = Modifier.padding(10.dp)) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    Icon(Icons.Default.History, contentDescription = null, tint = DisperindagGreenPrimary, modifier = Modifier.size(16.dp))
+                                                    Text("Changelog Apps Script (${com.example.util.AppsScriptUtils.VERSION})", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = DisperindagGreenPrimary)
+                                                }
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text(
+                                                    text = changelogText.trim(),
+                                                    fontSize = 10.sp,
+                                                    fontFamily = FontFamily.Monospace,
+                                                    color = Color.DarkGray
+                                                )
+                                            }
+                                        }
+
                                         Surface(
                                             color = Color(0xFF1E272C),
                                             shape = RoundedCornerShape(8.dp),
@@ -750,18 +563,41 @@ function deleteFileByUrl(url) {
                                             }
                                         }
 
-                                        Button(
-                                            onClick = {
-                                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                                clipboard.setPrimaryClip(ClipData.newPlainText("Apps Script", fullAppsScriptCode))
-                                                Toast.makeText(context, "✓ Berhasil menyalin kode Apps Script!", Toast.LENGTH_SHORT).show()
-                                            },
-                                            colors = ButtonDefaults.buttonColors(containerColor = DisperindagGreenPrimary),
-                                            modifier = Modifier.fillMaxWidth()
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Salin Kode Google Apps Script")
+                                            Button(
+                                                onClick = {
+                                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                                    clipboard.setPrimaryClip(ClipData.newPlainText("Apps Script", fullAppsScriptCode))
+                                                    Toast.makeText(context, "✓ Berhasil menyalin kode Apps Script!", Toast.LENGTH_SHORT).show()
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = DisperindagGreenPrimary),
+                                                modifier = Modifier.weight(1f),
+                                                shape = RoundedCornerShape(8.dp)
+                                            ) {
+                                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("Salin Kode", fontSize = 11.sp)
+                                            }
+
+                                            Button(
+                                                onClick = {
+                                                    val file = com.example.util.FileExportUtils.saveAppsScriptAsTxt(context, fullAppsScriptCode)
+                                                    if (file != null) {
+                                                        Toast.makeText(context, "Script disimpan di: ${file.absolutePath}", Toast.LENGTH_LONG).show()
+                                                        com.example.util.FileExportUtils.openFile(context, file)
+                                                    }
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                                modifier = Modifier.weight(1f),
+                                                shape = RoundedCornerShape(8.dp)
+                                            ) {
+                                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("Download .TXT", fontSize = 11.sp)
+                                            }
                                         }
                                     }
                                 }
@@ -771,12 +607,7 @@ function deleteFileByUrl(url) {
 
                     "pdf" -> {
                         // TAB 2: BRANDING & PDF LAYOUT DESIGN
-                        Text(
-                            text = "DESAIN KARTU PDF & BRANDING INSTANSI",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = DisperindagGreenPrimary
-                        )
+                        SectionHeader("DESAIN KARTU PDF & BRANDING INSTANSI", Icons.Default.PictureAsPdf, color = Color(0xFF1976D2))
 
                         // LIVE CARD PREVIEW
                         Card(
@@ -784,7 +615,7 @@ function deleteFileByUrl(url) {
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Column(modifier = Modifier.padding(14.dp)) {
-                                Text("Real-Time Preview Kartu PDF Pendataan:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DisperindagGreenPrimary)
+                                SubSectionHeader("Real-Time Preview Kartu PDF", color = Color(0xFF1976D2))
                                 Spacer(modifier = Modifier.height(10.dp))
                                 LivePdfCardPreview(config = stateConfig)
                             }
@@ -851,7 +682,7 @@ function deleteFileByUrl(url) {
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Text("Identitas Instansi & Header Aplikasi:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DisperindagGreenPrimary)
+                                SubSectionHeader("Identitas Instansi & Header Aplikasi", color = Color(0xFF1976D2))
                                 
                                 OutlinedTextField(
                                     value = stateConfig.appTitleHeader,
@@ -901,12 +732,31 @@ function deleteFileByUrl(url) {
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Text("Pengaturan Penyimpanan File PDF:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DisperindagGreenPrimary)
+                                SubSectionHeader("Penyimpanan File PDF & Dokumen", color = Color(0xFF1976D2))
+
+                                Surface(
+                                    color = Color(0xFFE8F5E9),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(Icons.Default.FolderSpecial, contentDescription = null, tint = DisperindagGreenPrimary, modifier = Modifier.size(20.dp))
+                                        Column {
+                                            Text("Lokasi Penyimpanan Default Aplikasi:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = DisperindagGreenPrimary)
+                                            Text("Internal Storage / SI-PENDATAPASAR / (PDF / EXCEL / APPS_SCRIPT / FOTO)", fontSize = 10.sp, color = Color.DarkGray)
+                                        }
+                                    }
+                                }
 
                                 OutlinedTextField(
                                     value = stateConfig.pdfStorageSubfolder,
                                     onValueChange = { stateConfig = stateConfig.copy(pdfStorageSubfolder = it) },
-                                    label = { Text("Subfolder PDF") },
+                                    label = { Text("Custom Subfolder PDF (Opsional)") },
+                                    placeholder = { Text("Contoh: KARTU_PEDAGANG") },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -962,7 +812,16 @@ function deleteFileByUrl(url) {
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Text("Ubah Text Dinamis Kop Surat & Kartu PDF:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DisperindagGreenPrimary)
+                                SubSectionHeader("Teks Dinamis Kop Surat & Kartu PDF", color = Color(0xFF1976D2))
+ 
+                                OutlinedTextField(
+                                    value = stateConfig.pdfTitleText,
+                                    onValueChange = { stateConfig = stateConfig.copy(pdfTitleText = it) },
+                                    label = { Text("Judul Kartu PDF (Kustom)") },
+                                    placeholder = { Text("Contoh: PASAR WARU - KARTU BUKTI\nPENDATAAN PEDAGANG") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    minLines = 2
+                                )
 
                                 OutlinedTextField(
                                     value = stateConfig.pdfHeaderTitle,
@@ -1012,7 +871,7 @@ function deleteFileByUrl(url) {
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("Kustomisasi Label / Teks PDF (Dinamis):", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DisperindagGreenPrimary)
+                                SubSectionHeader("Kustomisasi Label / Teks PDF (Dinamis)", color = Color(0xFF1976D2))
 
                                 OutlinedTextField(
                                     value = stateConfig.pdfLabelNama,
@@ -1037,6 +896,62 @@ function deleteFileByUrl(url) {
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth()
                                 )
+
+                                OutlinedTextField(
+                                    value = stateConfig.pdfLabelAlamat,
+                                    onValueChange = { stateConfig = stateConfig.copy(pdfLabelAlamat = it) },
+                                    label = { Text("Label Alamat") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                OutlinedTextField(
+                                    value = stateConfig.pdfLabelHp,
+                                    onValueChange = { stateConfig = stateConfig.copy(pdfLabelHp = it) },
+                                    label = { Text("Label Nomor HP/WA") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                OutlinedTextField(
+                                    value = stateConfig.pdfLabelKios,
+                                    onValueChange = { stateConfig = stateConfig.copy(pdfLabelKios = it) },
+                                    label = { Text("Label Nomor Kios/Los") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                OutlinedTextField(
+                                    value = stateConfig.pdfLabelKomoditi,
+                                    onValueChange = { stateConfig = stateConfig.copy(pdfLabelKomoditi = it) },
+                                    label = { Text("Label Komoditi") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                OutlinedTextField(
+                                    value = stateConfig.pdfLabelStatus,
+                                    onValueChange = { stateConfig = stateConfig.copy(pdfLabelStatus = it) },
+                                    label = { Text("Label Status Pedagang") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                OutlinedTextField(
+                                    value = stateConfig.pdfLabelWaktu,
+                                    onValueChange = { stateConfig = stateConfig.copy(pdfLabelWaktu = it) },
+                                    label = { Text("Label Waktu Pendataan") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                OutlinedTextField(
+                                    value = stateConfig.pdfLabelKeteranganHeader,
+                                    onValueChange = { stateConfig = stateConfig.copy(pdfLabelKeteranganHeader = it) },
+                                    label = { Text("Label Keterangan") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
                             }
                         }
 
@@ -1046,7 +961,7 @@ function deleteFileByUrl(url) {
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("Visibilitas Elemen Kartu PDF:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DisperindagGreenPrimary)
+                                SubSectionHeader("Visibilitas Elemen Kartu PDF", color = Color(0xFF1976D2))
                                 Spacer(modifier = Modifier.height(4.dp))
                                 CheckboxSettingRow("Tampilkan Kop Surat Resmi", stateConfig.pdfShowKopSurat) { stateConfig = stateConfig.copy(pdfShowKopSurat = it) }
                                 CheckboxSettingRow("Tampilkan Logo Instansi", stateConfig.pdfShowLogo) { stateConfig = stateConfig.copy(pdfShowLogo = it) }
@@ -1057,14 +972,292 @@ function deleteFileByUrl(url) {
                         }
                     }
 
-                    else -> {
-                        // TAB 3: SYSTEM RULES & CRUD ACCESS CONTROL
-                        Text(
-                            text = "ATURAN VALIDASI DATA & HAK AKSES SISTEM",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = DisperindagGreenPrimary
+                    "form" -> {
+                        // TAB 3: FORM DATA MANAGEMENT
+                        SectionHeader("MANAJEMEN DATA FORM TAMBAH/EDIT", Icons.Default.Assignment, color = Color(0xFFE65100))
+
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                SubSectionHeader("Visibilitas Field Form", color = Color(0xFFE65100))
+                                
+                                CheckboxSettingRow("Tampilkan NIK", stateConfig.formShowNik) { stateConfig = stateConfig.copy(formShowNik = it) }
+                                CheckboxSettingRow("Tampilkan Alamat", stateConfig.formShowAlamat) { stateConfig = stateConfig.copy(formShowAlamat = it) }
+                                CheckboxSettingRow("Tampilkan Nomor HP", stateConfig.formShowHp) { stateConfig = stateConfig.copy(formShowHp = it) }
+                                CheckboxSettingRow("Tampilkan Jenis Ruang", stateConfig.formShowJenisRuang) { stateConfig = stateConfig.copy(formShowJenisRuang = it) }
+                                CheckboxSettingRow("Tampilkan Nomor Kios/Los", stateConfig.formShowNomorKios) { stateConfig = stateConfig.copy(formShowNomorKios = it) }
+                                CheckboxSettingRow("Tampilkan Komoditi", stateConfig.formShowKomoditi) { stateConfig = stateConfig.copy(formShowKomoditi = it) }
+                                CheckboxSettingRow("Tampilkan Lama Berjualan", stateConfig.formShowLamaBerjualan) { stateConfig = stateConfig.copy(formShowLamaBerjualan = it) }
+                                CheckboxSettingRow("Tampilkan Status", stateConfig.formShowStatus) { stateConfig = stateConfig.copy(formShowStatus = it) }
+                                CheckboxSettingRow("Tampilkan Keterangan", stateConfig.formShowKeterangan) { stateConfig = stateConfig.copy(formShowKeterangan = it) }
+                                
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                SubSectionHeader("Syarat Kelengkapan Berkas (Mandatori)", color = Color(0xFFE65100))
+                                
+                                CheckboxSettingRow("Wajib Foto Pedagang", stateConfig.formShowFotoPedagang) { stateConfig = stateConfig.copy(formShowFotoPedagang = it) }
+                                CheckboxSettingRow("Wajib Foto KTP", stateConfig.formShowFotoKtp) { stateConfig = stateConfig.copy(formShowFotoKtp = it) }
+                                CheckboxSettingRow("Wajib Foto Surat Pernyataan", stateConfig.formShowFotoSurat) { stateConfig = stateConfig.copy(formShowFotoSurat = it) }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        SectionHeader("MANAJEMEN OPSI DROPDOWN DINAMIS", Icons.Default.List, color = Color(0xFFE65100))
+                        
+                        // Jenis Ruang Management
+                        DropdownManagementSection(
+                            title = "JENIS RUANG DAGANG",
+                            options = allJenisRuangOptions,
+                            onToggle = onToggleDropdownVisibility,
+                            onDelete = onDeleteDropdownOption,
+                            onAdd = { onAddDropdownOption("JENIS_RUANG", it) }
                         )
+
+                        // Komoditi Management
+                        DropdownManagementSection(
+                            title = "KOMODITI / JENIS USAHA",
+                            options = allKomoditiOptions,
+                            onToggle = onToggleDropdownVisibility,
+                            onDelete = onDeleteDropdownOption,
+                            onAdd = { onAddDropdownOption("KOMODITI", it) }
+                        )
+
+                        // Status Management
+                        DropdownManagementSection(
+                            title = "STATUS PEDAGANG",
+                            options = allStatusOptions,
+                            onToggle = onToggleDropdownVisibility,
+                            onDelete = onDeleteDropdownOption,
+                            onAdd = { onAddDropdownOption("STATUS", it) }
+                        )
+
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                SubSectionHeader("Opsi Dropdown Otomatis", color = Color(0xFFE65100))
+                                Text("Klik tombol di bawah untuk menyegarkan opsi dropdown berdasarkan data unik yang ada di database saat ini.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Button(
+                                    onClick = onRebuildDropdownClick,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Perbarui Semua Opsi Dropdown", fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    "storage" -> {
+                        // TAB 4: SUB-PENGATURAN STORAGE & SUB-FOLDER PENYIMPANAN DATA DOWNLOAD
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                SectionHeader("Penyimpanan & Folder Download Aplikasi", Icons.Default.FolderSpecial, Color(0xFF1E88E5))
+
+                                Text(
+                                    "Sub-pengaturan kustomisasi lokasi folder penyimpanan default untuk seluruh data hasil download dari aplikasi. Lokasi default berada di Internal Storage / SI-PENDATAPASAR / dengan sub-folder otomatis.",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    lineHeight = 16.sp
+                                )
+
+                                // Status Izin Akses Storage
+                                val hasPerm = AppStorageUtils.hasStoragePermission(context)
+                                Surface(
+                                    color = if (hasPerm) Color(0xFFE8F5E9) else Color(0xFFFFF3E0),
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, if (hasPerm) Color(0xFF4CAF50) else Color(0xFFFF9800)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Icon(
+                                            if (hasPerm) Icons.Default.CheckCircle else Icons.Default.Warning,
+                                            contentDescription = null,
+                                            tint = if (hasPerm) Color(0xFF2E7D32) else Color(0xFFE65100),
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = if (hasPerm) "Izin Akses Storage: DIBERIKAN ✓" else "Izin Akses Storage: PERLU DIKONFIRMASI ⚠️",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (hasPerm) Color(0xFF2E7D32) else Color(0xFFE65100)
+                                            )
+                                            Text(
+                                                text = if (hasPerm) "Aplikasi siap membaca & menyimpan file ke folder Internal Storage." else "Klik tombol di kanan untuk mengaktifkan izin akses storage.",
+                                                fontSize = 11.sp,
+                                                color = Color.DarkGray
+                                            )
+                                        }
+                                        Button(
+                                            onClick = { AppStorageUtils.openStoragePermissionSettings(context) },
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = if (hasPerm) Color(0xFF2E7D32) else Color(0xFFE65100)
+                                            ),
+                                            shape = RoundedCornerShape(6.dp),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                        ) {
+                                            Text(if (hasPerm) "Cek Izin" else "Minta Izin", fontSize = 11.sp)
+                                        }
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            stateConfig = stateConfig.copy(
+                                                storageMainFolder = "SI-PENDATAPASAR",
+                                                storagePdfFolder = "PDF",
+                                                storageExcelFolder = "EXCEL",
+                                                storageAppsScriptFolder = "APPS_SCRIPT",
+                                                storageFotoFolder = "FOTO",
+                                                storageBackupConfigFolder = "BACKUP-KONFIGURASI"
+                                            )
+                                            Toast.makeText(context, "Nama folder direset ke default!", Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Reset Path Default", fontSize = 11.sp)
+                                    }
+
+                                    Button(
+                                        onClick = {
+                                            val dirs = AppStorageUtils.ensureDirectoriesExist(context)
+                                            Toast.makeText(context, "✓ Berhasil membuat/verifikasi ${dirs.size} folder di Internal Storage!", Toast.LENGTH_LONG).show()
+                                        },
+                                        modifier = Modifier.weight(1.2f),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5)),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Icon(Icons.Default.CreateNewFolder, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Buat / Verifikasi Folder", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                                SubSectionHeader("Kustomisasi Sub-Folder Penyimpanan Data", Color(0xFF1E88E5))
+
+                                OutlinedTextField(
+                                    value = stateConfig.storageMainFolder,
+                                    onValueChange = { stateConfig = stateConfig.copy(storageMainFolder = it) },
+                                    label = { Text("Folder Utama (Root) Internal Storage") },
+                                    placeholder = { Text("SI-PENDATAPASAR") },
+                                    leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null, tint = Color(0xFF1E88E5)) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true
+                                )
+
+                                OutlinedTextField(
+                                    value = stateConfig.storagePdfFolder,
+                                    onValueChange = { stateConfig = stateConfig.copy(storagePdfFolder = it) },
+                                    label = { Text("Subfolder PDF Kartu & Laporan") },
+                                    placeholder = { Text("PDF") },
+                                    leadingIcon = { Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = Color(0xFFD32F2F)) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true
+                                )
+
+                                OutlinedTextField(
+                                    value = stateConfig.storageExcelFolder,
+                                    onValueChange = { stateConfig = stateConfig.copy(storageExcelFolder = it) },
+                                    label = { Text("Subfolder Excel (.xlsx) & CSV") },
+                                    placeholder = { Text("EXCEL") },
+                                    leadingIcon = { Icon(Icons.Default.TableChart, contentDescription = null, tint = Color(0xFF388E3C)) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true
+                                )
+
+                                OutlinedTextField(
+                                    value = stateConfig.storageAppsScriptFolder,
+                                    onValueChange = { stateConfig = stateConfig.copy(storageAppsScriptFolder = it) },
+                                    label = { Text("Subfolder File Apps Script (.txt)") },
+                                    placeholder = { Text("APPS_SCRIPT") },
+                                    leadingIcon = { Icon(Icons.Default.Code, contentDescription = null, tint = Color(0xFFF57C00)) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true
+                                )
+
+                                OutlinedTextField(
+                                    value = stateConfig.storageFotoFolder,
+                                    onValueChange = { stateConfig = stateConfig.copy(storageFotoFolder = it) },
+                                    label = { Text("Subfolder Foto Pedagang & Lampiran") },
+                                    placeholder = { Text("FOTO") },
+                                    leadingIcon = { Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = Color(0xFF7B1FA2)) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true
+                                )
+
+                                OutlinedTextField(
+                                    value = stateConfig.storageBackupConfigFolder,
+                                    onValueChange = { stateConfig = stateConfig.copy(storageBackupConfigFolder = it) },
+                                    label = { Text("Subfolder Backup Konfigurasi System JSON") },
+                                    placeholder = { Text("BACKUP-KONFIGURASI") },
+                                    leadingIcon = { Icon(Icons.Default.Backup, contentDescription = null, tint = Color(0xFF0097A7)) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true
+                                )
+
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                                SubSectionHeader("Struktur & Path Absolut Folder di HP", Color(0xFF1E88E5))
+
+                                val mainName = stateConfig.storageMainFolder.ifBlank { "SI-PENDATAPASAR" }
+                                val pdfSub = stateConfig.storagePdfFolder.ifBlank { "PDF" }
+                                val excelSub = stateConfig.storageExcelFolder.ifBlank { "EXCEL" }
+                                val scriptSub = stateConfig.storageAppsScriptFolder.ifBlank { "APPS_SCRIPT" }
+                                val fotoSub = stateConfig.storageFotoFolder.ifBlank { "FOTO" }
+                                val backupSub = stateConfig.storageBackupConfigFolder.ifBlank { "BACKUP-KONFIGURASI" }
+
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color(0xFFE1F5FE), RoundedCornerShape(8.dp))
+                                        .padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text("📁 Internal Storage / $mainName /", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF0277BD))
+                                    Text(" ├─ 📁 $pdfSub/ (Dokumen Kartu & Laporan PDF)", fontSize = 11.sp, color = Color.DarkGray)
+                                    Text(" ├─ 📁 $excelSub/ (Export Spreadsheet XLSX & CSV)", fontSize = 11.sp, color = Color.DarkGray)
+                                    Text(" ├─ 📁 $scriptSub/ (Script Kode Google Apps Script)", fontSize = 11.sp, color = Color.DarkGray)
+                                    Text(" ├─ 📁 $fotoSub/ (Foto Hasil Tangkapan Kamera / Download)", fontSize = 11.sp, color = Color.DarkGray)
+                                    Text(" └─ 📁 $backupSub/ (File JSON Cadangan Konfigurasi)", fontSize = 11.sp, color = Color.DarkGray)
+                                }
+                            }
+                        }
+                    }
+
+                    else -> {
+                        // TAB 5: SYSTEM RULES & CRUD ACCESS CONTROL
+                        SectionHeader("ATURAN VALIDASI DATA & HAK AKSES", Icons.Default.Tune, color = Color(0xFF6A1B9A))
 
                         // Completeness rules
                         Card(
@@ -1072,7 +1265,7 @@ function deleteFileByUrl(url) {
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("Aturan Kelengkapan Data Pedagang:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DisperindagGreenPrimary)
+                                SubSectionHeader("Aturan Kelengkapan Data Pedagang", color = Color(0xFF6A1B9A))
 
                                 SwitchSettingRow(
                                     label = "Tampilkan Warning Data Belum Lengkap",
@@ -1081,8 +1274,7 @@ function deleteFileByUrl(url) {
                                 )
 
                                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
-                                Text("Syarat Wajib Isi Untuk Berkas Lengkap:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                SubSectionHeader("Syarat Wajib Isi Untuk Berkas Lengkap", color = Color(0xFF6A1B9A))
 
                                 CheckboxSettingRow("NIK (Wajib 16 Digit)", stateConfig.requireNik) { stateConfig = stateConfig.copy(requireNik = it) }
                                 CheckboxSettingRow("Nomor HP (Hubungi Pedagang)", stateConfig.requireNomorHp) { stateConfig = stateConfig.copy(requireNomorHp = it) }
@@ -1099,7 +1291,7 @@ function deleteFileByUrl(url) {
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("Atribut yang Tampil di Daftar Pedagang:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DisperindagGreenPrimary)
+                                SubSectionHeader("Atribut Daftar Pedagang", color = Color(0xFF6A1B9A))
                                 CheckboxSettingRow("Tampilkan NIK di Card", stateConfig.cardShowNik) { stateConfig = stateConfig.copy(cardShowNik = it) }
                                 CheckboxSettingRow("Tampilkan Nomor HP di Card", stateConfig.cardShowHp) { stateConfig = stateConfig.copy(cardShowHp = it) }
                                 CheckboxSettingRow("Tampilkan Alamat di Card", stateConfig.cardShowAlamat) { stateConfig = stateConfig.copy(cardShowAlamat = it) }
@@ -1114,7 +1306,7 @@ function deleteFileByUrl(url) {
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("Kontrol Hak Akses Operasi Data (CRUD):", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DisperindagGreenPrimary)
+                                SubSectionHeader("Kontrol Hak Akses Operasi Data", color = Color(0xFF6A1B9A))
                                 SwitchSettingRow("Izinkan Tambah Pedagang (CREATE)", stateConfig.allowCreate) { stateConfig = stateConfig.copy(allowCreate = it) }
                                 SwitchSettingRow("Izinkan Ubah Data (UPDATE)", stateConfig.allowUpdate) { stateConfig = stateConfig.copy(allowUpdate = it) }
                                 SwitchSettingRow("Izinkan Hapus Data (DELETE)", stateConfig.allowDelete) { stateConfig = stateConfig.copy(allowDelete = it) }
@@ -1122,70 +1314,113 @@ function deleteFileByUrl(url) {
                         }
 
                         // Backup & Restore
-
                         Card(
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Text("Manajemen Data Form (Dropdown):", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DisperindagGreenPrimary)
-                                
-                                Text("Tombol di bawah ini akan mengatur ulang opsi pilihan untuk JENIS RUANG, KOMODITI, dan STATUS ke setelan bawaan terbaru, dan menambahkan semua nilai unik dari data pedagang saat ini.", fontSize = 11.sp, color = Color.Gray)
-                                
-                                Button(
-                                    onClick = { 
-                                        onRebuildDropdownClick() 
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                SubSectionHeader("Backup & Restore Konfigurasi System", color = Color(0xFF6A1B9A))
+
+                                Text(
+                                    text = "Seluruh konfigurasi instansi, spreadsheet, webhook, syarat kelengkapan form, serta visibilitas PDF akan dicadangkan secara menyeluruh.",
+                                    fontSize = 11.sp,
+                                    color = Color.Gray,
+                                    lineHeight = 15.sp
+                                )
+
+                                Surface(
+                                    color = Color(0xFF6A1B9A).copy(alpha = 0.06f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Perbarui Opsi Dropdown")
+                                    Row(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(Icons.Default.Folder, contentDescription = null, tint = Color(0xFF6A1B9A), modifier = Modifier.size(20.dp))
+                                        Column {
+                                            Text("Folder Backup Target:", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6A1B9A))
+                                            Text("${stateConfig.storageMainFolder}/${stateConfig.storageBackupConfigFolder}/", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+                                        }
+                                    }
                                 }
-                            }
-                        }
 
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Text("Manajemen File Konfigurasi (JSON Backup):", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DisperindagGreenPrimary)
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Button(
                                         onClick = {
                                             try {
-                                                val json = AgencyConfigManager.exportConfigToJson(stateConfig)
+                                                val jsonStr = AgencyConfigManager.exportConfigToJson(stateConfig)
+                                                val backupDir = AppStorageUtils.getBackupConfigDirectory(context)
+
+                                                val dateStr = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())
+                                                val timeStr = SimpleDateFormat("HHmm", Locale.getDefault()).format(Date())
+                                                val randomCode = String.format("%04d", (0..9999).random())
+                                                val fileName = "${dateStr}-${timeStr}-BACKUPKONFIGURASI-${randomCode}.json"
+
+                                                val backupFile = File(backupDir, fileName)
+                                                FileOutputStream(backupFile).use { fos ->
+                                                    fos.write(jsonStr.toByteArray(Charsets.UTF_8))
+                                                }
+
                                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                                clipboard.setPrimaryClip(ClipData.newPlainText("Backup JSON", json))
-                                                Toast.makeText(context, "✓ JSON Cadangan disalin ke clipboard!", Toast.LENGTH_LONG).show()
+                                                clipboard.setPrimaryClip(ClipData.newPlainText("Backup JSON", jsonStr))
+
+                                                lastBackupFile = backupFile
+                                                showBackupSuccessDialog = true
+                                                Toast.makeText(context, "✓ Backup file berhasil dibuat!", Toast.LENGTH_SHORT).show()
                                             } catch (e: Exception) {
-                                                Toast.makeText(context, "Gagal export: ${e.message}", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, "Gagal backup: ${e.message}", Toast.LENGTH_LONG).show()
                                             }
                                         },
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
-                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6A1B9A)),
+                                        modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(8.dp)
                                     ) {
-                                        Icon(Icons.Default.Backup, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Backup JSON", fontSize = 11.sp)
+                                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Backup Konfigurasi (Ke Storage)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
 
-                                    Button(
-                                        onClick = { jsonRestoreLauncher.launch("application/json") },
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(8.dp)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        Icon(Icons.Default.SettingsBackupRestore, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Restore JSON", fontSize = 11.sp)
+                                        Button(
+                                            onClick = { jsonRestoreLauncher.launch("*/*") },
+                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Restore File JSON", fontSize = 11.sp)
+                                        }
+
+                                        OutlinedButton(
+                                            onClick = {
+                                                pasteFromClipboard(context) { pastedText ->
+                                                    try {
+                                                        val res = AgencyConfigManager.importConfigFromJson(context, pastedText)
+                                                        if (res.isSuccess) {
+                                                            stateConfig = res.getOrThrow()
+                                                            Toast.makeText(context, "✓ Konfigurasi dari Clipboard berhasil dipulihkan!", Toast.LENGTH_LONG).show()
+                                                        } else {
+                                                            Toast.makeText(context, "❌ Format JSON dari clipboard tidak valid", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    } catch (e: Exception) {
+                                                        Toast.makeText(context, "Error restore: ${e.message}", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            },
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF6A1B9A)),
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Restore Clipboard", fontSize = 11.sp)
+                                        }
                                     }
                                 }
                             }
@@ -1196,6 +1431,54 @@ function deleteFileByUrl(url) {
                 Spacer(modifier = Modifier.height(80.dp))
             }
         }
+    }
+
+    if (showBackupSuccessDialog && lastBackupFile != null) {
+        val backupFile = lastBackupFile!!
+        AlertDialog(
+            onDismissRequest = { showBackupSuccessDialog = false },
+            icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF2E7D32), modifier = Modifier.size(36.dp)) },
+            title = { Text("Backup Konfigurasi Berhasil", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("File backup konfigurasi berhasil disimpan ke internal storage HP:", fontSize = 12.sp)
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text("Nama File:", fontSize = 10.sp, color = Color.Gray)
+                            Text(backupFile.name, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6A1B9A))
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Folder Penyimpanan:", fontSize = 10.sp, color = Color.Gray)
+                            Text("${stateConfig.storageMainFolder}/${stateConfig.storageBackupConfigFolder}/", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Path Lengkap:", fontSize = 10.sp, color = Color.Gray)
+                            Text(backupFile.absolutePath, fontSize = 10.sp, color = Color.DarkGray)
+                        }
+                    }
+                    Text("✓ Data JSON konfigurasi juga disalin ke Clipboard.", fontSize = 11.sp, color = Color(0xFF2E7D32), fontWeight = FontWeight.SemiBold)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        FileExportUtils.openFile(context, backupFile)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = DisperindagGreenPrimary)
+                ) {
+                    Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Buka File Backup", fontSize = 12.sp)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBackupSuccessDialog = false }) {
+                    Text("Tutup", fontSize = 12.sp)
+                }
+            }
+        )
     }
 
     if (showResetDialog) {
@@ -1334,14 +1617,21 @@ fun LivePdfCardPreview(config: AgencyConfig) {
                 shape = RoundedCornerShape(4.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = config.pdfTitleText.ifBlank { "${config.namaPasar} - KARTU BUKTI PENDATAAN" },
-                    color = Color.White,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(vertical = 3.dp, horizontal = 4.dp)
-                )
+                Column(
+                    modifier = Modifier.padding(vertical = 3.dp, horizontal = 4.dp).fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    val previewTitle = config.pdfTitleText.ifBlank { "${config.namaPasar} - KARTU BUKTI PENDATAAN" }
+                    previewTitle.split("\n").forEach { line ->
+                        Text(
+                            text = line,
+                            color = Color.White,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
             }
 
             // Card Body content
@@ -1425,6 +1715,126 @@ fun LivePdfCardPreview(config: AgencyConfig) {
             }
         }
     }}
+
+@Composable
+fun DropdownManagementSection(
+    title: String,
+    options: List<com.example.data.model.DropdownOption>,
+    onToggle: (com.example.data.model.DropdownOption) -> Unit,
+    onDelete: (Long) -> Unit,
+    onAdd: (String) -> Unit
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+    var newValue by remember { mutableStateOf("") }
+    
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isExpanded = !isExpanded }
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.List, contentDescription = null, tint = DisperindagGreenPrimary, modifier = Modifier.size(18.dp))
+                    Text(title, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Surface(
+                        color = DisperindagGreenPrimary.copy(alpha = 0.1f),
+                        shape = CircleShape
+                    ) {
+                        Text(
+                            text = options.size.toString(),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = DisperindagGreenPrimary,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                Icon(if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null)
+            }
+            
+            AnimatedVisibility(visible = isExpanded) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Centang data di bawah untuk memilih opsi yang ingin dimunculkan di form pendataan:",
+                        fontSize = 11.sp,
+                        color = DisperindagGreenPrimary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    
+                    if (options.isEmpty()) {
+                        Text("Belum ada data opsi.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    
+                    options.forEach { option ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Checkbox(
+                                    checked = option.isVisible,
+                                    onCheckedChange = { onToggle(option) },
+                                    colors = CheckboxDefaults.colors(checkedColor = DisperindagGreenPrimary)
+                                )
+                                Text(
+                                    text = option.optionValue,
+                                    fontSize = 12.sp,
+                                    color = if (option.isVisible) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                    fontWeight = if (option.isVisible) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                            IconButton(onClick = { onDelete(option.id) }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Hapus", tint = Color.Red.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    // Add New Option Input
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = newValue,
+                            onValueChange = { newValue = it },
+                            placeholder = { Text("Tambah opsi baru...", fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            textStyle = TextStyle(fontSize = 12.sp)
+                        )
+                        IconButton(
+                            onClick = {
+                                if (newValue.isNotBlank()) {
+                                    onAdd(newValue.trim())
+                                    newValue = ""
+                                }
+                            },
+                            colors = IconButtonDefaults.iconButtonColors(containerColor = DisperindagGreenPrimary.copy(alpha = 0.1f))
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Tambah", tint = DisperindagGreenPrimary)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun CheckboxSettingRow(

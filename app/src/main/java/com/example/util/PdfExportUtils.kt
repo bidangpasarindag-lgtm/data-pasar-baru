@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Environment
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import android.media.ExifInterface
 import com.example.data.config.AgencyConfigManager
 import com.example.data.model.Pedagang
 import kotlinx.coroutines.CoroutineScope
@@ -35,6 +36,7 @@ object PdfExportUtils {
         pedagangList: List<Pedagang>,
         fileNamePrefix: String = "Bukti_Pendataan_Pedagang",
         onStart: () -> Unit = {},
+        onProgress: (Float, String, String) -> Unit = { _, _, _ -> },
         onComplete: () -> Unit = {}
     ) {
         if (pedagangList.isEmpty()) {
@@ -43,15 +45,19 @@ object PdfExportUtils {
         }
 
         onStart()
-        Toast.makeText(context, "Mempersiapkan Kartu PDF (${pedagangList.size} Pedagang)...", Toast.LENGTH_SHORT).show()
+        onProgress(0.01f, "Mempersiapkan data...", "Menghitung estimasi...")
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                val startTime = System.currentTimeMillis()
                 val pdfDocument = PdfDocument()
 
                 val agencyConfig = AgencyConfigManager.config.value
 
                 // Load Logo Instansi (Custom Uri or default drawable)
+                withContext(Dispatchers.Main) {
+                    onProgress(0.05f, "Memuat logo instansi...", "")
+                }
                 var logoBitmap: Bitmap? = if (agencyConfig.customLogoUri.isNotBlank()) {
                     loadBitmapFromUriOrUrl(context, agencyConfig.customLogoUri)
                 } else null
@@ -68,6 +74,25 @@ object PdfExportUtils {
                 }
 
                 pedagangList.forEachIndexed { index, pedagang ->
+                    val currentProgress = 0.1f + (index.toFloat() / pedagangList.size.toFloat() * 0.8f)
+                    val elapsed = System.currentTimeMillis() - startTime
+                    val estTotal = if (index > 0) (elapsed / index) * pedagangList.size else 0L
+                    val remaining = if (index > 0) estTotal - elapsed else 0L
+                    
+                    val remainingStr = if (remaining > 0) {
+                        val seconds = (remaining / 1000) % 60
+                        val minutes = (remaining / (1000 * 60)) % 60
+                        String.format("%02d:%02d", minutes, seconds)
+                    } else "Menghitung..."
+
+                    withContext(Dispatchers.Main) {
+                        onProgress(
+                            currentProgress,
+                            "Merender halaman ${index + 1} dari ${pedagangList.size}",
+                            "Estimasi sisa: $remainingStr"
+                        )
+                    }
+
                     val pageInfo = PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, index + 1).create()
                     val page = pdfDocument.startPage(pageInfo)
                     val canvas = page.canvas
@@ -87,7 +112,9 @@ object PdfExportUtils {
                     pdfDocument.finishPage(page)
                 }
 
-                // Simpan file ke direktori dokumen publik/aplikasi sesuai konfigurasi
+                withContext(Dispatchers.Main) {
+                    onProgress(0.95f, "Menyimpan file PDF...", "Hampir selesai")
+                }
                 val fileName = if (pedagangList.size == 1) {
                     val p = pedagangList[0]
                     var fmt = agencyConfig.pdfFileNameFormat
@@ -104,19 +131,11 @@ object PdfExportUtils {
                     "${cleanPrefix}_$timestamp.pdf"
                 }
 
-                val baseDir = if (agencyConfig.pdfStorageDirectory == "DOWNLOADS") {
-                    context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.cacheDir
-                } else {
-                    context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS) ?: context.cacheDir
-                }
-
-                val finalDir = if (agencyConfig.pdfStorageSubfolder.isNotBlank()) {
-                    File(baseDir, agencyConfig.pdfStorageSubfolder)
-                } else {
-                    baseDir
-                }
-
-                if (!finalDir.exists()) finalDir.mkdirs()
+                val finalDir = AppStorageUtils.getCategoryDirectory(
+                    category = AppStorageUtils.CategoryFolder.PDF,
+                    customSubFolder = agencyConfig.pdfStorageSubfolder,
+                    context = context
+                )
 
                 val pdfFile = File(finalDir, fileName)
                 val outputStream = FileOutputStream(pdfFile)
@@ -125,13 +144,6 @@ object PdfExportUtils {
                 pdfDocument.close()
 
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        context,
-                        "✓ PDF Kartu Berhasil Dibuat: ${pdfFile.name} (${pedagangList.size} Kartu)",
-                        Toast.LENGTH_LONG
-                    ).show()
-
-                    // Buka / Bagikan PDF
                     openPdfFile(context, pdfFile)
                     onComplete()
                 }
@@ -146,6 +158,28 @@ object PdfExportUtils {
         }
     }
 
+    private fun rotateBitmapIfNeeded(bitmap: Bitmap?, exif: ExifInterface): Bitmap? {
+        if (bitmap == null) return null
+        val orientation = exif.getAttributeInt(
+            ExifInterface.TAG_ORIENTATION,
+            ExifInterface.ORIENTATION_NORMAL
+        )
+        val rotationDegrees = when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> 90
+            ExifInterface.ORIENTATION_ROTATE_180 -> 180
+            ExifInterface.ORIENTATION_ROTATE_270 -> 270
+            else -> 0
+        }
+        if (rotationDegrees == 0) return bitmap
+        val matrix = Matrix()
+        matrix.postRotate(rotationDegrees.toFloat())
+        val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        if (rotated != bitmap) {
+            bitmap.recycle()
+        }
+        return rotated
+    }
+
     private fun loadBitmapFromUriOrUrl(context: Context, rawUri: String?): Bitmap? {
         if (rawUri.isNullOrBlank()) return null
         val directUrl = DriveImageUtils.convertToDirectUrl(rawUri) ?: rawUri
@@ -157,12 +191,18 @@ object PdfExportUtils {
                 connection.readTimeout = 6000
                 connection.doInput = true
                 connection.connect()
-                val inputStream = connection.getInputStream()
-                BitmapFactory.decodeStream(inputStream)
+                val bytes = connection.getInputStream().readBytes()
+                val exif = ExifInterface(bytes.inputStream())
+                val rawBmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                rotateBitmapIfNeeded(rawBmp, exif)
             } else if (directUrl.startsWith("content://") || directUrl.startsWith("file://")) {
                 val uri = Uri.parse(directUrl)
-                val inputStream = context.contentResolver.openInputStream(uri)
-                BitmapFactory.decodeStream(inputStream)
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                if (bytes != null) {
+                    val exif = ExifInterface(bytes.inputStream())
+                    val rawBmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    rotateBitmapIfNeeded(rawBmp, exif)
+                } else null
             } else {
                 null
             }
@@ -334,14 +374,31 @@ object PdfExportUtils {
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
         }
-        val cardBannerTitle = if (agencyConfig.pdfTitleText.isNotBlank()) agencyConfig.pdfTitleText.uppercase() else "${agencyConfig.namaPasar.uppercase()} - KARTU BUKTI PENDATAAN PEDAGANG"
-        canvas.drawText(cardBannerTitle, (PAGE_WIDTH / 2).toFloat(), 107f, docTitlePaint)
+        val cardBannerTitle = if (agencyConfig.pdfTitleText.isNotBlank()) 
+            agencyConfig.pdfTitleText.uppercase() 
+        else 
+            "${agencyConfig.namaPasar.uppercase()} - KARTU BUKTI PENDATAAN PEDAGANG"
+            
+        // Handle Multi-line Title
+        val titleLines = cardBannerTitle.split("\n")
+        val titleLineHeight = 12f
+        val totalTitleHeight = (titleLines.size * titleLineHeight).coerceAtLeast(20f)
+        val bannerTop = 93f
+        val bannerBottom = bannerTop + totalTitleHeight
+        
+        canvas.drawRoundRect(20f, bannerTop, (PAGE_WIDTH - 20).toFloat(), bannerBottom, 4f, 4f, docTitleBg)
+        
+        var currentTitleY = bannerTop + (totalTitleHeight / 2f) - ((titleLines.size - 1) * titleLineHeight / 2f) + 3f
+        titleLines.forEach { line ->
+            canvas.drawText(line, (PAGE_WIDTH / 2).toFloat(), currentTitleY, docTitlePaint)
+            currentTitleY += titleLineHeight
+        }
 
         // 4. Detail Pedagang (Sisi Kiri)
                 val labelPaint = Paint().apply {
             color = Color.parseColor("#333333")
             textSize = bodySize
-            typeface = Typeface.create("arial", Typeface.NORMAL)
+            typeface = Typeface.create("arial", Typeface.BOLD)
             isAntiAlias = true
         }
 
@@ -355,12 +412,12 @@ object PdfExportUtils {
                 val boldValuePaint = Paint().apply {
             color = Color.parseColor("#333333")
             textSize = bodySize
-            typeface = Typeface.create("arial", Typeface.NORMAL)
+            typeface = Typeface.create("arial", Typeface.BOLD)
             isAntiAlias = true
         }
 
-        var startY = 132f
-        val lineSpacing = 21f
+        var startY = bannerBottom + 19f
+        val lineSpacing = 18f
         val startXLabel = 30f
         val startXColon = 175f
         val startXValue = 185f
@@ -392,14 +449,18 @@ object PdfExportUtils {
         }
 
         drawField(agencyConfig.pdfLabelNama, pedagang.namaPedagang, isHighlight = true, isUpperCase = true)
-        drawField(agencyConfig.pdfLabelNik, pedagang.nik.ifBlank { "-" })
-        drawField(agencyConfig.pdfLabelAlamat, pedagang.alamat.ifBlank { "-" })
-        drawField(agencyConfig.pdfLabelHp, pedagang.nomorHp.ifBlank { "-" })
-        drawField(agencyConfig.pdfLabelRuang, pedagang.jenisRuangDagang, isHighlight = true)
-        drawField(agencyConfig.pdfLabelKios, pedagang.nomorKiosLos, isHighlight = true)
-        drawField(agencyConfig.pdfLabelKomoditi, pedagang.komoditi)
-        drawField(agencyConfig.pdfLabelStatus, pedagang.status, isHighlight = true)
-        drawField(agencyConfig.pdfLabelWaktu, pedagang.timestamp)
+        drawField(agencyConfig.pdfLabelNik, pedagang.nik.ifBlank { "-" }, isHighlight = false)
+        drawField(agencyConfig.pdfLabelAlamat, pedagang.alamat.ifBlank { "-" }, isHighlight = false)
+        drawField(agencyConfig.pdfLabelHp, pedagang.nomorHp.ifBlank { "-" }, isHighlight = false)
+        drawField(agencyConfig.pdfLabelRuang, pedagang.jenisRuangDagang, isHighlight = false)
+        drawField(agencyConfig.pdfLabelKios, pedagang.nomorKiosLos, isHighlight = false)
+        drawField(agencyConfig.pdfLabelKomoditi, pedagang.komoditi, isHighlight = false)
+        drawField(agencyConfig.pdfLabelStatus, pedagang.status, isHighlight = false)
+        drawField(agencyConfig.pdfLabelWaktu, pedagang.timestamp, isHighlight = false)
+        
+        if (pedagang.keterangan.trim().isNotBlank()) {
+            drawField(agencyConfig.pdfLabelKeteranganHeader, pedagang.keterangan, isHighlight = false)
+        }
 
         // 5. Bingkai Foto Pedagang (Sisi Kanan Atas)
         val photoLeft = 420f
@@ -427,7 +488,6 @@ object PdfExportUtils {
         val imgBottom = photoBottom - imgFrameMargin
 
         if (photoBitmap != null && agencyConfig.pdfShowFotoPedagang) {
-            // Face-centered crop calculation to prevent stretching/distortion
             val destWidth = imgRight - imgLeft
             val destHeight = imgBottom - imgTop
             val destRatio = destWidth / destHeight
@@ -435,20 +495,31 @@ object PdfExportUtils {
             val srcHeight = photoBitmap.height.toFloat()
             val srcRatio = srcWidth / srcHeight
 
-            val srcRect = if (srcRatio > destRatio) {
-                // Image is wider -> crop horizontally, center horizontally
-                val cropWidth = srcHeight * destRatio
-                val left = (srcWidth - cropWidth) / 2f
-                Rect(left.toInt(), 0, (left + cropWidth).toInt(), photoBitmap.height)
+            // Fill clean white background inside photo box
+            val bgPaint = Paint().apply { color = Color.WHITE }
+            canvas.drawRect(imgLeft, imgTop, imgRight, imgBottom, bgPaint)
+
+            // Aspect-fit photo inside frame, aligned to top so head and face remain focused at top
+            val (fitWidth, fitHeight) = if (srcRatio > destRatio) {
+                // Image is wider relative to frame -> fit to destWidth
+                val w = destWidth
+                val h = destWidth / srcRatio
+                Pair(w, minOf(destHeight, h))
             } else {
-                // Image is taller -> crop vertically, focus on upper-center for face
-                val cropHeight = srcWidth / destRatio
-                val top = maxOf(0f, (srcHeight - cropHeight) * 0.25f)
-                Rect(0, top.toInt(), photoBitmap.width, (top + cropHeight).toInt())
+                // Image is taller or standard portrait -> fit to destHeight
+                val h = destHeight
+                val w = destHeight * srcRatio
+                Pair(minOf(destWidth, w), h)
             }
 
-            val destRect = RectF(imgLeft, imgTop, imgRight, imgBottom)
-            canvas.drawBitmap(photoBitmap, srcRect, destRect, Paint(Paint.FILTER_BITMAP_FLAG))
+            val drawLeft = imgLeft + (destWidth - fitWidth) / 2f
+            val drawTop = imgTop // Align to top of frame to preserve full face/head
+            val drawRight = drawLeft + fitWidth
+            val drawBottom = drawTop + fitHeight
+
+            val srcRect = Rect(0, 0, photoBitmap.width, photoBitmap.height)
+            val destRectF = RectF(drawLeft, drawTop, drawRight, drawBottom)
+            canvas.drawBitmap(photoBitmap, srcRect, destRectF, Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG))
         } else {
             val placeholderBg = Paint().apply {
                 color = Color.parseColor("#E0E0E0")
@@ -494,54 +565,11 @@ object PdfExportUtils {
         }
         canvas.drawText(agencyConfig.pdfLabelScanQr, (photoLeft + photoRight) / 2f, qrBoxBottom - 12f, qrTitlePaint)
 
-        
-
-        // 6. Section Keterangan (Sisi Kiri)
+        // 6. Section Informasi Resmi Pendataan (Dipindah ke bawah pas di atas footer)
         val infoBoxLeft = 30f
-        var currentBottomY = 335f
-
-        if (pedagang.keterangan.trim().isNotBlank()) {
-            val ketBoxTop = currentBottomY
-            val ketBoxBottom = ketBoxTop + 36f
-            val ketBoxRight = 582f
-
-            val ketBoxBg = Paint().apply {
-                color = Color.parseColor("#FFFDE7") // Soft warm yellow accent
-                style = Paint.Style.FILL
-            }
-            canvas.drawRoundRect(infoBoxLeft, ketBoxTop, ketBoxRight, ketBoxBottom, 6f, 6f, ketBoxBg)
-
-            val ketBoxBorder = Paint().apply {
-                color = Color.parseColor("#FBC02D")
-                style = Paint.Style.STROKE
-                strokeWidth = 1f
-            }
-            canvas.drawRoundRect(infoBoxLeft, ketBoxTop, ketBoxRight, ketBoxBottom, 6f, 6f, ketBoxBorder)
-
-            val ketTitlePaint = Paint().apply {
-                color = Color.parseColor("#E65100")
-                textSize = 9f
-                typeface = Typeface.create("arial", Typeface.BOLD)
-                isAntiAlias = true
-            }
-            canvas.drawText(agencyConfig.pdfLabelKeteranganHeader, infoBoxLeft + 10f, ketBoxTop + 14f, ketTitlePaint)
-
-            val ketTextPaint = Paint().apply {
-                color = Color.parseColor("#333333")
-                textSize = 8.5f
-                typeface = Typeface.create("arial", Typeface.NORMAL)
-                isAntiAlias = true
-            }
-            val truncatedKet = if (pedagang.keterangan.length > 95) pedagang.keterangan.substring(0, 92) + "..." else pedagang.keterangan
-            canvas.drawText(truncatedKet, infoBoxLeft + 10f, ketBoxTop + 27f, ketTextPaint)
-
-            currentBottomY = ketBoxBottom + 6f
-        }
-
-        // Informasi Resmi Pendataan
-        val infoBoxTop = currentBottomY
         val infoBoxRight = 582f
-        val infoBoxBottom = infoBoxTop + 42f
+        val infoBoxBottom = (PAGE_HEIGHT - 45).toFloat()
+        val infoBoxTop = infoBoxBottom - 40f
 
         val infoBoxBg = Paint().apply {
             color = Color.parseColor("#E8F5E9")
@@ -558,20 +586,20 @@ object PdfExportUtils {
 
         val infoTextPaint = Paint().apply {
             color = Color.parseColor("#2E7D32")
-            textSize = 8.5f
+            textSize = 8f
             typeface = Typeface.create("arial", Typeface.BOLD)
             isAntiAlias = true
         }
         canvas.drawText(
             agencyConfig.pdfLabelTerdataResmi,
             infoBoxLeft + 10f,
-            infoBoxTop + 16f,
+            infoBoxTop + 14f,
             infoTextPaint
         )
 
         val infoSubTextPaint = Paint().apply {
             color = Color.parseColor("#444444")
-            textSize = 8f
+            textSize = 7.5f
             isAntiAlias = true
         }
         val dateStr = SimpleDateFormat("dd MMMM yyyy", Locale("id", "ID")).format(Date())
@@ -584,7 +612,7 @@ object PdfExportUtils {
         canvas.drawText(
             customDiterbitkan,
             infoBoxLeft + 10f,
-            infoBoxTop + 29f,
+            infoBoxTop + 26f,
             infoSubTextPaint
         )
 
@@ -593,7 +621,7 @@ object PdfExportUtils {
             color = Color.parseColor("#1B5E20")
             strokeWidth = 1f
         }
-        canvas.drawLine(16f, (PAGE_HEIGHT - 26).toFloat(), (PAGE_WIDTH - 16).toFloat(), (PAGE_HEIGHT - 26).toFloat(), footerLinePaint)
+        canvas.drawLine(16f, (PAGE_HEIGHT - 18).toFloat(), (PAGE_WIDTH - 16).toFloat(), (PAGE_HEIGHT - 18).toFloat(), footerLinePaint)
 
         val footerTextPaint = Paint().apply {
             color = Color.parseColor("#666666")
@@ -604,7 +632,7 @@ object PdfExportUtils {
         canvas.drawText(
             agencyConfig.pdfFooterText,
             20f,
-            (PAGE_HEIGHT - 12).toFloat(),
+            (PAGE_HEIGHT - 8).toFloat(),
             footerTextPaint
         )
         
@@ -617,12 +645,18 @@ object PdfExportUtils {
                 typeface = Typeface.create("arial", Typeface.NORMAL)
             }
             val petugasName = pedagang.emailAddress.ifBlank { "Admin" }
-            canvas.drawText("Petugas: $petugasName", (PAGE_WIDTH - 20).toFloat(), (PAGE_HEIGHT - 12).toFloat(), petugasPaint)
+            canvas.drawText("Petugas: $petugasName", (PAGE_WIDTH - 20).toFloat(), (PAGE_HEIGHT - 8).toFloat(), petugasPaint)
         }
     }
 
     private fun openPdfFile(context: Context, pdfFile: File) {
         try {
+            Toast.makeText(
+                context,
+                "PDF Berhasil Disimpan di:\n${pdfFile.absolutePath}",
+                Toast.LENGTH_LONG
+            ).show()
+
             val uri: Uri = FileProvider.getUriForFile(
                 context,
                 "${context.packageName}.fileprovider",
@@ -632,18 +666,33 @@ object PdfExportUtils {
             val viewIntent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, "application/pdf")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             }
 
-            // Membuka dialog pilihan (chooser) aplikasi penampil PDF di dalam HP user
-            val chooserIntent = Intent.createChooser(viewIntent, "Buka PDF Pendataan Dengan Aplikasi...").apply {
+            // Membuka dialog pilihan (chooser) aplikasi penampil PDF di HP pengguna
+            val chooserIntent = Intent.createChooser(viewIntent, "Pilih Aplikasi untuk Membuka PDF...").apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            // Grant permissions to resolved intent handlers if any
+            val resInfoList = context.packageManager.queryIntentActivities(
+                chooserIntent,
+                android.content.pm.PackageManager.MATCH_DEFAULT_ONLY
+            )
+            for (resolveInfo in resInfoList) {
+                val packageName = resolveInfo.activityInfo.packageName
+                context.grantUriPermission(
+                    packageName,
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
             }
 
             context.startActivity(chooserIntent)
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(context, "PDF tersimpan di: ${pdfFile.absolutePath}", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "PDF Tersimpan di: ${pdfFile.absolutePath}\n(Gagal membuka aplikasi penampil PDF)", Toast.LENGTH_LONG).show()
         }
     }
 }

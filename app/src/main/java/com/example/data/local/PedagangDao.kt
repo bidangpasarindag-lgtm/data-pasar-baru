@@ -6,13 +6,13 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface PedagangDao {
-    @Query("SELECT * FROM pedagang ORDER BY id DESC")
+    @Query("SELECT * FROM pedagang ORDER BY timestamp DESC")
     fun getAllPedagang(): Flow<List<Pedagang>>
 
     @Query("SELECT * FROM pedagang WHERE id = :id")
     suspend fun getPedagangById(id: Long): Pedagang?
 
-    @Query("SELECT * FROM pedagang WHERE namaPedagang LIKE '%' || :query || '%' OR nik LIKE '%' || :query || '%' OR nomorKiosLos LIKE '%' || :query || '%' ORDER BY id DESC")
+    @Query("SELECT * FROM pedagang WHERE namaPedagang LIKE '%' || :query || '%' OR nik LIKE '%' || :query || '%' OR nomorKiosLos LIKE '%' || :query || '%' ORDER BY timestamp DESC")
     fun searchPedagang(query: String): Flow<List<Pedagang>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

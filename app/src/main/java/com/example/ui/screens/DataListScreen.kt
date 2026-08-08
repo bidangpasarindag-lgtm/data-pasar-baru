@@ -70,6 +70,9 @@ fun DataListScreen(
     var selectedSortOption by remember { mutableStateOf("Nama (A-Z)") }
     var isSortMenuExpanded by remember { mutableStateOf(false) }
     var isGeneratingPdf by remember { mutableStateOf(false) }
+    var pdfProgress by remember { mutableFloatStateOf(-1f) }
+    var pdfProcessName by remember { mutableStateOf("") }
+    var pdfEstimatedTime by remember { mutableStateOf("") }
     var pedagangToDelete by remember { mutableStateOf<Pedagang?>(null) }
 
     val sortOptions = listOf(
@@ -256,7 +259,16 @@ fun DataListScreen(
                             context = context,
                             pedagangList = filteredList,
                             fileNamePrefix = "Kartu_Bukti_Pendataan_Pedagang",
-                            onStart = { isGeneratingPdf = true },
+                            onStart = { 
+                                isGeneratingPdf = true
+                                pdfProgress = 0f
+                                pdfProcessName = "Memulai Cetak Batch..."
+                            },
+                            onProgress = { progress, name, time ->
+                                pdfProgress = progress
+                                pdfProcessName = name
+                                pdfEstimatedTime = time
+                            },
                             onComplete = { isGeneratingPdf = false }
                         )
                     },
@@ -337,6 +349,15 @@ fun DataListScreen(
         }
     }
 
+    ProgressDialog(
+        showDialog = isGeneratingPdf,
+        title = "Membuat PDF",
+        message = "Sedang membuat kartu bukti pendataan dan merender dokumen...",
+        progress = pdfProgress,
+        processName = pdfProcessName,
+        estimatedTime = pdfEstimatedTime
+    )
+
     // Delete Confirmation Dialog
     pedagangToDelete?.let { target ->
         AlertDialog(
@@ -378,6 +399,9 @@ fun PedagangCard(
 
     var showMenu by remember { mutableStateOf(false) }
     var isGeneratingPdf by remember { mutableStateOf(false) }
+    var pdfProgress by remember { mutableFloatStateOf(-1f) }
+    var pdfProcessName by remember { mutableStateOf("") }
+    var pdfEstimatedTime by remember { mutableStateOf("") }
 
     Card(
         onClick = onClick,
@@ -599,7 +623,16 @@ fun PedagangCard(
                                 context = cardContext,
                                 pedagangList = listOf(pedagang),
                                 fileNamePrefix = "Kartu_${pedagang.namaPedagang}",
-                                onStart = { isGeneratingPdf = true },
+                                onStart = { 
+                                    isGeneratingPdf = true
+                                    pdfProgress = 0f
+                                    pdfProcessName = "Memulai Cetak Kartu..."
+                                },
+                                onProgress = { progress, name, time ->
+                                    pdfProgress = progress
+                                    pdfProcessName = name
+                                    pdfEstimatedTime = time
+                                },
                                 onComplete = { isGeneratingPdf = false }
                             )
                         },
@@ -616,5 +649,14 @@ fun PedagangCard(
             }
         }
     }
+
+    ProgressDialog(
+        showDialog = isGeneratingPdf,
+        title = "Membuat PDF",
+        message = "Sedang membuat kartu bukti pendataan...",
+        progress = pdfProgress,
+        processName = pdfProcessName,
+        estimatedTime = pdfEstimatedTime
+    )
 }
 
