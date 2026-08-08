@@ -87,6 +87,8 @@ fun SettingsScreen(
     var showResetDialog by remember { mutableStateOf(false) }
     var isTestingConnection by remember { mutableStateOf(false) }
     var connectionResult by remember { mutableStateOf<String?>(null) }
+    var isCheckingVersion by remember { mutableStateOf(false) }
+    var versionCheckResult by remember { mutableStateOf<String?>(null) }
     var showGuide by remember { mutableStateOf(false) }
 
     var lastBackupFile by remember { mutableStateOf<File?>(null) }
@@ -99,18 +101,19 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(color.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
-                .padding(vertical = 12.dp, horizontal = 14.dp)
+                .padding(vertical = 8.dp, horizontal = 10.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (icon != null) {
-                    Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
+                    Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
                 }
                 Text(
                     text = title.uppercase(),
                     style = MaterialTheme.typography.titleSmall,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = color,
-                    letterSpacing = 0.8.sp
+                    letterSpacing = 0.5.sp
                 )
             }
         }
@@ -121,14 +124,14 @@ fun SettingsScreen(
         Surface(
             color = color.copy(alpha = 0.05f),
             shape = RoundedCornerShape(4.dp),
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp)
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 2.dp)
         ) {
             Text(
                 text = title,
-                fontSize = 11.sp,
+                fontSize = 10.5.sp,
                 fontWeight = FontWeight.Black,
                 color = color,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
             )
         }
     }
@@ -354,8 +357,8 @@ fun SettingsScreen(
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 when (activeTab) {
                     "cloud" -> {
@@ -437,10 +440,10 @@ fun SettingsScreen(
                                     modifier = Modifier.fillMaxWidth().testTag("input_webhook_url")
                                 )
 
-                                // Interactive Webhook Tester
+                                // Interactive Webhook & AppsScript Version Tester
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     Button(
                                         onClick = {
@@ -455,29 +458,63 @@ fun SettingsScreen(
                                         },
                                         enabled = !isTestingConnection,
                                         modifier = Modifier.weight(1f),
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer)
+                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer),
+                                        shape = RoundedCornerShape(8.dp)
                                     ) {
                                         if (isTestingConnection) {
-                                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
                                         } else {
-                                            Icon(Icons.Default.NetworkCheck, contentDescription = null, modifier = Modifier.size(16.dp))
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Uji Webhook", fontSize = 12.sp)
+                                            Icon(Icons.Default.NetworkCheck, contentDescription = null, modifier = Modifier.size(14.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Uji Webhook", fontSize = 11.sp)
+                                        }
+                                    }
+
+                                    Button(
+                                        onClick = {
+                                            scope.launch {
+                                                isCheckingVersion = true
+                                                versionCheckResult = "Memeriksa versi Apps Script..."
+                                                val service = GoogleSheetSyncService()
+                                                val res = service.checkAppsScriptVersion()
+                                                if (res.isSuccess) {
+                                                    versionCheckResult = res.getOrNull()?.third
+                                                } else {
+                                                    versionCheckResult = "❌ Gagal mengecek versi: ${res.exceptionOrNull()?.message}"
+                                                }
+                                                isCheckingVersion = false
+                                            }
+                                        },
+                                        enabled = !isCheckingVersion,
+                                        modifier = Modifier.weight(1.2f),
+                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = DisperindagAccentGold, contentColor = Color.Black),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        if (isCheckingVersion) {
+                                            CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.Black, strokeWidth = 2.dp)
+                                        } else {
+                                            Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(14.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Uji Versi Script", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
 
                                     Button(
                                         onClick = onSyncClick,
                                         enabled = !isSyncing,
-                                        modifier = Modifier.weight(1.2f),
-                                        colors = ButtonDefaults.buttonColors(containerColor = DisperindagGreenPrimary)
+                                        modifier = Modifier.weight(1.1f),
+                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = DisperindagGreenPrimary),
+                                        shape = RoundedCornerShape(8.dp)
                                     ) {
                                         if (isSyncing) {
-                                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                                            CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White, strokeWidth = 2.dp)
                                         } else {
-                                            Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Tarik Data", fontSize = 12.sp)
+                                            Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(14.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Tarik Data", fontSize = 11.sp)
                                         }
                                     }
                                 }
@@ -485,12 +522,31 @@ fun SettingsScreen(
                                 connectionResult?.let {
                                     Text(
                                         text = it,
-                                        fontSize = 12.sp,
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = if (it.startsWith("✓")) Color(0xFF2E7D32) else Color.Red,
                                         textAlign = TextAlign.Center,
                                         modifier = Modifier.fillMaxWidth()
                                     )
+                                }
+
+                                versionCheckResult?.let { text ->
+                                    val isSuccess = text.startsWith("✓")
+                                    Surface(
+                                        color = if (isSuccess) Color(0xFFE8F5E9) else Color(0xFFFFF3E0),
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isSuccess) Color(0xFF4CAF50) else Color(0xFFFF9800)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = text,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (isSuccess) Color(0xFF1B5E20) else Color(0xFFE65100),
+                                            lineHeight = 15.sp,
+                                            modifier = Modifier.padding(10.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -1351,7 +1407,14 @@ fun SettingsScreen(
                                         onClick = {
                                             try {
                                                 val jsonStr = AgencyConfigManager.exportConfigToJson(stateConfig)
-                                                val backupDir = AppStorageUtils.getBackupConfigDirectory(context)
+                                                val backupDir = AppStorageUtils.getBackupConfigDirectory(
+                                                    context = context,
+                                                    customMainFolder = stateConfig.storageMainFolder,
+                                                    customSubFolder = stateConfig.storageBackupConfigFolder
+                                                )
+                                                if (!backupDir.exists()) {
+                                                    backupDir.mkdirs()
+                                                }
 
                                                 val dateStr = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())
                                                 val timeStr = SimpleDateFormat("HHmm", Locale.getDefault()).format(Date())
@@ -1368,7 +1431,8 @@ fun SettingsScreen(
 
                                                 lastBackupFile = backupFile
                                                 showBackupSuccessDialog = true
-                                                Toast.makeText(context, "✓ Backup file berhasil dibuat!", Toast.LENGTH_SHORT).show()
+                                                AppStorageUtils.scanFile(context, backupFile)
+                                                Toast.makeText(context, "✓ File backup disimpan di:\n${backupFile.absolutePath}", Toast.LENGTH_LONG).show()
                                             } catch (e: Exception) {
                                                 Toast.makeText(context, "Gagal backup: ${e.message}", Toast.LENGTH_LONG).show()
                                             }
@@ -1846,11 +1910,11 @@ fun CheckboxSettingRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onCheckedChange(!checked) }
-            .padding(vertical = 3.dp),
+            .padding(vertical = 1.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(text = label, fontSize = 12.sp, modifier = Modifier.weight(1f))
+        Text(text = label, fontSize = 11.5.sp, modifier = Modifier.weight(1f))
         Checkbox(
             checked = checked,
             onCheckedChange = onCheckedChange,
@@ -1868,11 +1932,11 @@ fun SwitchSettingRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(text = label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        Text(text = label, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,

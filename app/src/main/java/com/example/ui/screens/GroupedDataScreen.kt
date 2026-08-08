@@ -45,7 +45,7 @@ fun GroupedDataScreen(
     val context = LocalContext.current
     val agencyConfig by AgencyConfigManager.config.collectAsState()
 
-    var selectedSortOption by remember { mutableStateOf("Nama (A-Z)") }
+    var selectedSortOption by remember { mutableStateOf("Tanggal (Terbaru)") }
     var isSortMenuExpanded by remember { mutableStateOf(false) }
     var isGeneratingPdf by remember { mutableStateOf(false) }
     var pdfProgress by remember { mutableFloatStateOf(-1f) }

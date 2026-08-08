@@ -30,6 +30,7 @@ object FileExportUtils {
                 it.write(code.toByteArray())
             }
             
+            AppStorageUtils.scanFile(context, file)
             Log.d("FileExport", "Apps Script saved to: ${file.absolutePath}")
             return file
         } catch (e: Exception) {
@@ -85,6 +86,7 @@ object FileExportUtils {
             }
             workbook.close()
             
+            AppStorageUtils.scanFile(context, file)
             Log.d("FileExport", "Template XLSX downloaded to: ${file.absolutePath}")
             return file
         } catch (e: Exception) {

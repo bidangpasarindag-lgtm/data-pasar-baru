@@ -1,12 +1,22 @@
 package com.example.util
 
 object AppsScriptUtils {
-    const val VERSION = "2026.08.08 - v2.4 (Full Feature Sync & Drive Auto-Cleanup)"
+    const val VERSION = "2026.08.08 - v2.6 (Apps Script Compatibility Verification & Version Check)"
 
     const val CHANGELOG = """
 === CHANGELOG APPS SCRIPT INTEGRASI PASAR WARU ===
 
-[v2.4 - 2026-08-08]
+[v2.6 - 08/08/2026 09:40:00 WIB]
+• Fitur pengujian kesesuaian/pemeriksaan versi Apps Script aktif di spreadsheet via tombol 'Uji Versi Script'.
+• Respons JSON berstandar pada action PING/CHECK_VERSION/GET_VERSION yang mencakup data versi, versionCode, dan timestamp update.
+• Otomatisasi deteksi versi lama vs versi terbaru pada aplikasi pendataan Android.
+
+[v2.5 - 08/08/2026 09:22:00 WIB]
+• Penyesuaian standar format timestamp pada sheet 'username' (last login) dan sheet 'aktivitas user' menjadi dd/MM/yyyy HH:mm:ss.
+• Integrasi otomatisasi sync log aktivitas dan login dengan format tanggal dan jam Indonesia (WIB).
+• Peningkatan stabilitas dan kompatibilitas parsing tanggal antara Google Apps Script, Excel, dan Android.
+
+[v2.4 - 08/08/2026 09:00:00 WIB]
 • Penyesuaian penuh parameter HTTP POST dari aplikasi Android.
 • Otomatisasi pembersihan foto lama di Google Drive saat foto diperbarui atau dihapus (isDeleteFoto = true).
 • Pembersihan file Drive secara otomatis saat data pedagang dihapus (DELETE action).
@@ -14,7 +24,7 @@ object AppsScriptUtils {
 • Peningkatan penanganan format NIK & Nomor HP dengan apostrof (') agar tersimpan sebagai teks murni di Google Spreadsheet.
 • Dukungan PING/PONG_OK untuk pengujian cepat status koneksi Webhook.
 
-[v2.3 - 2026-08-01]
+[v2.3 - 01/08/2026 09:00:00 WIB]
 • Integrasi autentikasi sheet 'username' dengan timestamp last login.
 • Penambahan folder Drive khusus foto pedagang, KTP, dan surat pernyataan.
 • Format nama file otomatis berdasar tanggal, jenis foto, jam, dan nama pedagang.
@@ -23,19 +33,23 @@ object AppsScriptUtils {
     const val LATEST_CODE = """/**
  * GOOGLE APPS SCRIPT INTEGRASI PENDATAAN PASAR WARU
  * Dinas Perindustrian dan Perdagangan Kabupaten Pamekasan
- * Versi: 2026.08.08 - v2.4 (Full Feature Sync & Drive Auto-Cleanup)
+ * Versi: 2026.08.08 - v2.6 (Apps Script Compatibility Verification & Version Check)
  *
  * CHANGELOG:
- * - v2.4 (2026-08-08):
+ * - v2.6 (08/08/2026 09:40:00 WIB):
+ *   1. Fitur pengujian kesesuaian/pemeriksaan versi Apps Script aktif di spreadsheet via tombol 'Uji Versi Script'.
+ *   2. Respons JSON berstandar pada action PING/CHECK_VERSION/GET_VERSION.
+ *   3. Otomatisasi deteksi versi lama vs versi terbaru pada aplikasi pendataan Android.
+ * - v2.5 (08/08/2026 09:22:00 WIB):
+ *   1. Penyesuaian standar format timestamp pada sheet 'username' (last login) dan sheet 'aktivitas user' (dd/MM/yyyy HH:mm:ss).
+ *   2. Integrasi otomatisasi sync log aktivitas dengan format tanggal & jam Indonesia (WIB).
+ * - v2.4 (08/08/2026 09:00:00 WIB):
  *   1. Penyesuaian penuh parameter HTTP POST dari aplikasi Android.
  *   2. Otomatisasi hapus foto lama di Google Drive saat diperbarui / dihapus.
  *   3. Pembersihan file Drive otomatis saat data pedagang dihapus.
  *   4. Log real-time ke sheet 'aktivitas user' (LOGIN, LOGOUT, TAMBAH, EDIT, HAPUS).
  *   5. Penanganan NIK & HP dengan apostrof (') agar tersimpan sebagai teks murni.
  *   6. Dukungan PING / PONG_OK untuk pengujian cepat status Webhook.
- * - v2.3 (2026-08-01):
- *   1. Integrasi autentikasi sheet 'username'.
- *   2. Penambahan folder Drive untuk simpan foto pedagang, KTP, dan surat pernyataan.
  */
 
 function doPost(e) {
@@ -45,8 +59,14 @@ function doPost(e) {
     var ssId = params.spreadsheet_id || "1Q7OtJ1fuEwkycAtnAjRNrSNrAEJ5SxjGRn-ge9YcWlU";
     var gid = params.sheetGid || "1751220302";
     
-    if (action === "PING") {
-      return ContentService.createTextOutput("PONG_OK");
+    if (action === "PING" || action === "CHECK_VERSION" || action === "GET_VERSION") {
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "PONG_OK",
+        version: "v2.6",
+        versionCode: 2026080803,
+        versionName: "2026.08.08 - v2.6 (Apps Script Compatibility Verification & Version Check)",
+        updatedAt: "08/08/2026 09:40:00 WIB"
+      })).setMimeType(ContentService.MimeType.JSON);
     }
     
     var ss = SpreadsheetApp.openById(ssId);

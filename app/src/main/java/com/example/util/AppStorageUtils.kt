@@ -78,31 +78,60 @@ object AppStorageUtils {
 
     /**
      * Mengambil direktori folder utama SI-PENDATAPASAR pada internal storage (/storage/emulated/0/SI-PENDATAPASAR/)
-     * dengan fallback otomatis jika direktori utama tidak dapat dibuat.
+     * dengan multi-strategy fallback (Root -> Downloads -> Documents -> App External Dir).
      */
     fun getMainDirectory(context: Context? = null, customMainName: String? = null): File {
         val mainName = customMainName?.trim()?.ifBlank { null } ?: getMainFolderName()
-        return try {
+
+        // Strategy 1: Direct Root External Storage (/storage/emulated/0/{mainName})
+        try {
             val rootDir = Environment.getExternalStorageDirectory()
             val mainDir = File(rootDir, mainName)
-            if (!mainDir.exists()) {
-                mainDir.mkdirs()
-            }
-            if (!mainDir.exists()) {
-                val docsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-                val fallbackMainDir = File(docsDir, mainName)
-                if (!fallbackMainDir.exists()) fallbackMainDir.mkdirs()
-                fallbackMainDir
-            } else {
-                mainDir
-            }
+            if (!mainDir.exists()) mainDir.mkdirs()
+            if (mainDir.exists() && mainDir.canWrite()) return mainDir
         } catch (e: Exception) {
-            Log.e("AppStorageUtils", "Error creating main directory: ${e.message}")
-            val docsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-            val fallbackMainDir = File(docsDir, mainName)
-            if (!fallbackMainDir.exists()) fallbackMainDir.mkdirs()
-            fallbackMainDir
+            Log.e("AppStorageUtils", "Root dir strategy failed: ${e.message}")
         }
+
+        // Strategy 2: Public Downloads Directory (/storage/emulated/0/Download/{mainName})
+        try {
+            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val dlMainDir = File(downloadsDir, mainName)
+            if (!dlMainDir.exists()) dlMainDir.mkdirs()
+            if (dlMainDir.exists()) return dlMainDir
+        } catch (e: Exception) {
+            Log.e("AppStorageUtils", "Downloads dir strategy failed: ${e.message}")
+        }
+
+        // Strategy 3: Public Documents Directory (/storage/emulated/0/Documents/{mainName})
+        try {
+            val docsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+            val docsMainDir = File(docsDir, mainName)
+            if (!docsMainDir.exists()) docsMainDir.mkdirs()
+            if (docsMainDir.exists()) return docsMainDir
+        } catch (e: Exception) {
+            Log.e("AppStorageUtils", "Documents dir strategy failed: ${e.message}")
+        }
+
+        // Strategy 4: App External Files Dir (always guaranteed writable)
+        if (context != null) {
+            try {
+                val appExtDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.getExternalFilesDir(null)
+                if (appExtDir != null) {
+                    val fallbackDir = File(appExtDir, mainName)
+                    if (!fallbackDir.exists()) fallbackDir.mkdirs()
+                    return fallbackDir
+                }
+            } catch (e: Exception) {
+                Log.e("AppStorageUtils", "App ext dir strategy failed: ${e.message}")
+            }
+        }
+
+        // Ultimate fallback
+        val defaultDocs = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+        val fallback = File(defaultDocs, mainName)
+        if (!fallback.exists()) fallback.mkdirs()
+        return fallback
     }
 
     /**
@@ -111,10 +140,12 @@ object AppStorageUtils {
     fun getCategoryDirectory(
         category: CategoryFolder,
         customSubFolder: String? = null,
+        customMainFolder: String? = null,
         context: Context? = null
     ): File {
         val config = AgencyConfigManager.config.value
-        val mainDir = getMainDirectory(context, config.storageMainFolder)
+        val mainName = customMainFolder?.trim()?.ifBlank { null } ?: config.storageMainFolder
+        val mainDir = getMainDirectory(context, mainName)
 
         val subFolderConfigName = when (category) {
             CategoryFolder.PDF -> config.storagePdfFolder.ifBlank { "PDF" }
@@ -125,19 +156,11 @@ object AppStorageUtils {
             CategoryFolder.BACKUP -> config.storageBackupConfigFolder.ifBlank { "BACKUP" }
         }.trim()
 
-        val categoryDir = File(mainDir, subFolderConfigName)
+        val subName = customSubFolder?.trim()?.ifBlank { null } ?: subFolderConfigName
+
+        val categoryDir = File(mainDir, subName)
         if (!categoryDir.exists()) {
             categoryDir.mkdirs()
-        }
-
-        val cleanCustom = customSubFolder?.trim()
-        if (!cleanCustom.isNullOrBlank() && 
-            !cleanCustom.equals("si-pendata pasar", ignoreCase = true) && 
-            !cleanCustom.equals("SI-PENDATAPASAR", ignoreCase = true) &&
-            !cleanCustom.equals(subFolderConfigName, ignoreCase = true)) {
-            val customDir = File(categoryDir, cleanCustom)
-            if (!customDir.exists()) customDir.mkdirs()
-            return customDir
         }
 
         return categoryDir
@@ -147,8 +170,35 @@ object AppStorageUtils {
      * Mengambil direktori folder khusus Backup Konfigurasi:
      * Internal Storage/SI-PENDATAPASAR/BACKUP-KONFIGURASI/
      */
-    fun getBackupConfigDirectory(context: Context? = null): File {
-        return getCategoryDirectory(CategoryFolder.BACKUP_KONFIGURASI, context = context)
+    fun getBackupConfigDirectory(
+        context: Context? = null,
+        customMainFolder: String? = null,
+        customSubFolder: String? = null
+    ): File {
+        return getCategoryDirectory(
+            category = CategoryFolder.BACKUP_KONFIGURASI,
+            customSubFolder = customSubFolder,
+            customMainFolder = customMainFolder,
+            context = context
+        )
+    }
+
+    /**
+     * Memicu MediaScanner agar file baru tersinkron dan terbaca oleh File Manager HP.
+     */
+    fun scanFile(context: Context?, file: File) {
+        if (context == null) return
+        try {
+            android.media.MediaScannerConnection.scanFile(
+                context,
+                arrayOf(file.absolutePath),
+                null
+            ) { path, uri ->
+                Log.d("AppStorageUtils", "MediaScanner indexed file: $path -> $uri")
+            }
+        } catch (e: Exception) {
+            Log.e("AppStorageUtils", "Error scanning file: ${e.message}")
+        }
     }
 
     /**

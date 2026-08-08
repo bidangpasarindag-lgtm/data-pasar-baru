@@ -55,6 +55,60 @@ class GoogleSheetSyncService {
         }
     }
 
+    suspend fun checkAppsScriptVersion(customUrl: String? = null, customSpreadsheetId: String? = null): Result<Triple<Boolean, String, String>> = withContext(Dispatchers.IO) {
+        try {
+            val targetUrl = customUrl?.ifBlank { null } ?: currentConfig.webhookUrl
+            val targetSsId = customSpreadsheetId?.ifBlank { null } ?: currentConfig.spreadsheetId
+
+            val formBody = FormBody.Builder()
+                .add("action", "CHECK_VERSION")
+                .add("spreadsheet_id", targetSsId)
+                .build()
+
+            val request = Request.Builder()
+                .url(targetUrl)
+                .post(formBody)
+                .addHeader("User-Agent", "DisperindagPamekasanApp/1.0")
+                .build()
+
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string() ?: ""
+
+            val latestVersion = com.example.util.AppsScriptUtils.VERSION
+            if (response.isSuccessful && responseBody.isNotBlank()) {
+                if (responseBody.contains("v2.6") || responseBody.contains("2026.08.08 - v2.6")) {
+                    Result.success(
+                        Triple(
+                            true,
+                            "v2.6",
+                            "✓ Apps Script di Spreadsheet SUDAH SESUAI DENGAN VERSI TERBARU!\n• Versi Aktif: $latestVersion\n• Status: Kompatibel Penuh"
+                        )
+                    )
+                } else if (responseBody.contains("PONG_OK")) {
+                    Result.success(
+                        Triple(
+                            false,
+                            "Versi Lama",
+                            "⚠️ Webhook terhubung, namun Apps Script di Spreadsheet masih VERSI LAMA.\n• Versi Aplikasi: $latestVersion\n• Rekomendasi: Salin & tempel kode Apps Script terbaru dari menu di bawah ke Google Sheets Anda."
+                        )
+                    )
+                } else {
+                    Result.success(
+                        Triple(
+                            false,
+                            "Tidak Dikenal",
+                            "⚠️ Respons server terdeteksi, namun versi script tidak cocok.\n• Respons: $responseBody"
+                        )
+                    )
+                }
+            } else {
+                Result.failure(Exception("Respons server: ${response.code} $responseBody"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun loginToSheet(usernameEntered: String, passwordEntered: String): Result<Pair<String, String>> = withContext(Dispatchers.IO) {
         try {
             val targetUrl = currentConfig.webhookUrl

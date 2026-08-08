@@ -295,6 +295,13 @@ fun MainAppContent(viewModel: PedagangViewModel) {
                             searchQuery = searchQuery,
                             onSearchQueryChange = { viewModel.setSearchQuery(it) },
                             onPedagangClick = { viewModel.selectPedagang(it) },
+                            onEditPedagang = {
+                                viewModel.initEditForm(it)
+                                isFormVisible = true
+                            },
+                            onDeletePedagang = {
+                                viewModel.deletePedagang(it)
+                            },
                             onAddNewClick = {
                                 viewModel.initNewForm()
                                 isFormVisible = true
