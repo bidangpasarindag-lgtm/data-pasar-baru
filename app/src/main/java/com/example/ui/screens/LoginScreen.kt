@@ -591,6 +591,52 @@ fun LoginScreen(
                 }
             }
 
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // Developed By Footer
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable {
+                        try {
+                            val intent = android.content.Intent(
+                                android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse("https://wa.me/6282337876108")
+                            )
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            android.widget.Toast.makeText(context, "Tidak dapat membuka WhatsApp", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    .padding(8.dp)
+            ) {
+                Text(
+                    text = "Developed By : Ubed Al-Idist",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = DisperindagGreenPrimary
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Phone,
+                        contentDescription = "WhatsApp",
+                        tint = Color(0xFF25D366),
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Text(
+                        text = "Hubungi via WhatsApp: 082337876108",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(24.dp))
         }
 

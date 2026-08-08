@@ -258,7 +258,7 @@ fun MainAppContent(viewModel: PedagangViewModel) {
                             selected = activeTab == MainTab.SETTINGS,
                             onClick = { activeTab = MainTab.SETTINGS },
                             icon = { Icon(Icons.Default.Settings, contentDescription = "Pengaturan") },
-                            label = { Text("Setting", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                            label = { Text("Pengaturan", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
                             modifier = Modifier.testTag("nav_tab_settings")
                         )
                     }

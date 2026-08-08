@@ -673,24 +673,45 @@ class GoogleSheetSyncService {
             val timestamp = getCellByHeaders("Timestamp", "Waktu", "Tanggal").ifBlank {
                 if (row.isNotEmpty()) row[0].trim() else ""
             }
-            val email = getCellByHeaders("Email", "User Email", "Username").ifBlank {
-                if (row.size > 1) row[1].trim() else ""
+            var email = getCellByHeaders("Email", "User Email", "Username")
+            var nama = getCellByHeaders("Nama Petugas", "Nama", "Operator", "Petugas")
+
+            // Parse "Petugas" column with "Name (email)" format if needed
+            if (nama.isBlank() && row.size > 1) {
+                val rawPetugas = row[1].trim()
+                if (rawPetugas.contains("(") && rawPetugas.endsWith(")")) {
+                    val openIndex = rawPetugas.lastIndexOf("(")
+                    nama = rawPetugas.substring(0, openIndex).trim()
+                    email = rawPetugas.substring(openIndex + 1, rawPetugas.length - 1).trim()
+                } else {
+                    nama = rawPetugas
+                    email = "bidangpasar.indag@gmail.com"
+                }
+            } else if (email.isBlank()) {
+                email = "bidangpasar.indag@gmail.com"
             }
-            val nama = getCellByHeaders("Nama Petugas", "Nama", "Operator").ifBlank {
-                if (row.size > 2) row[2].trim() else ""
-            }
-            val aktivitas = getCellByHeaders("Aktivitas", "Kegiatan", "Action").ifBlank {
-                if (row.size > 3) row[3].trim() else ""
-            }
-            val keterangan = getCellByHeaders("Keterangan", "Catatan", "Detail").ifBlank {
-                if (row.size > 4) row[4].trim() else ""
+
+            var aktivitas = getCellByHeaders("Aktivitas", "Kegiatan", "Action", "Aktivitas (Log)")
+            var keterangan = getCellByHeaders("Keterangan", "Catatan", "Detail")
+
+            // Fallback for combined log column in 3-column format: "Aktivitas (Log)"
+            if (aktivitas.isBlank() && row.size > 2) {
+                val rawLog = row[2].trim()
+                if (rawLog.startsWith("[") && rawLog.contains("]")) {
+                    val closeBracketIndex = rawLog.indexOf("]")
+                    aktivitas = rawLog.substring(1, closeBracketIndex).trim()
+                    keterangan = rawLog.substring(closeBracketIndex + 1).trim()
+                } else {
+                    aktivitas = "Aktivitas"
+                    keterangan = rawLog
+                }
             }
 
             if (aktivitas.isNotBlank()) {
                 list.add(
                     com.example.data.model.UserActivity(
                         timestamp = timestamp.ifBlank { "Baru" },
-                        email = email.ifBlank { "bidangpasar.indag@gmail.com" },
+                        email = email,
                         namaPetugas = nama.ifBlank { "Petugas Indag" },
                         aktivitas = aktivitas,
                         keterangan = keterangan

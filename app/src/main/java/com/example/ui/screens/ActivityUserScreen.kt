@@ -76,30 +76,39 @@ fun ActivityUserScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // ... (Header remains the same)
-        Box(
+        // Title Banner (styled like Charts Upper Executive Banner)
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+            shape = RoundedCornerShape(16.dp),
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(16.dp)
                 .background(
-                    Brush.verticalGradient(
-                        colors = listOf(DisperindagGreenPrimary, DisperindagGreenPrimary.copy(alpha = 0.85f))
-                    )
+                    Brush.horizontalGradient(
+                        colors = listOf(DisperindagGreenPrimary, Color(0xFF1B5E20))
+                    ),
+                    shape = RoundedCornerShape(16.dp)
                 )
-                .padding(vertical = 20.dp, horizontal = 16.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                Icon(
+                    Icons.Default.History,
+                    contentDescription = null,
+                    tint = DisperindagAccentGold,
+                    modifier = Modifier.size(38.dp)
+                )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "AKTIVITAS USER & LOG SYSTEM",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White,
+                        letterSpacing = 1.sp
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Jejak aktivitas dan sinkronisasi petugas terdata secara real-time",
                         fontSize = 11.sp,
@@ -112,7 +121,7 @@ fun ActivityUserScreen(
                     enabled = !isSyncing,
                     colors = IconButtonDefaults.iconButtonColors(contentColor = Color.White)
                 ) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Refresh data")
+                    Icon(Icons.Default.Refresh, contentDescription = "Refresh data", tint = Color.White)
                 }
             }
         }
@@ -298,14 +307,14 @@ fun ActivityUserScreen(
                                     .padding(vertical = 4.dp),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                // Left timeline line & dot
+                                // Left timeline line & dot (reduced size)
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.width(36.dp)
+                                    modifier = Modifier.width(28.dp)
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .size(28.dp)
+                                            .size(20.dp)
                                             .clip(CircleShape)
                                             .background(tint.copy(alpha = 0.12f)),
                                         contentAlignment = Alignment.Center
@@ -314,15 +323,15 @@ fun ActivityUserScreen(
                                             imageVector = icon,
                                             contentDescription = null,
                                             tint = tint,
-                                            modifier = Modifier.size(16.dp)
+                                            modifier = Modifier.size(12.dp)
                                         )
                                     }
 
-                                    // Connecting timeline line
+                                    // Connecting timeline line (more compact)
                                     Box(
                                         modifier = Modifier
-                                            .width(1.5.dp)
-                                            .height(if (isExpanded) 120.dp else 60.dp)
+                                            .width(1.dp)
+                                            .height(if (isExpanded) 100.dp else 45.dp)
                                             .background(Color.LightGray.copy(alpha = 0.2f))
                                     )
                                 }
@@ -368,15 +377,19 @@ fun ActivityUserScreen(
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
 
-                                        Spacer(modifier = Modifier.height(4.dp))
-
-                                        Text(
-                                            text = activity.keterangan,
-                                            fontSize = 10.5.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = if (isExpanded) 10 else 2,
-                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                        )
+                                        // Only show keterangan if not empty and not identical to aktivitas
+                                        if (activity.keterangan.isNotBlank() && 
+                                            activity.keterangan.trim().lowercase() != activity.aktivitas.trim().lowercase()
+                                        ) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = activity.keterangan,
+                                                fontSize = 10.5.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = if (isExpanded) 10 else 2,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                            )
+                                        }
 
                                         AnimatedVisibility(
                                             visible = isExpanded,
