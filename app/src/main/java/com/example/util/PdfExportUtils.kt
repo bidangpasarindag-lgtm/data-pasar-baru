@@ -133,7 +133,7 @@ object PdfExportUtils {
 
                 val finalDir = AppStorageUtils.getCategoryDirectory(
                     category = AppStorageUtils.CategoryFolder.PDF,
-                    customSubFolder = agencyConfig.pdfStorageSubfolder,
+                    customSubFolder = agencyConfig.storagePdfFolder,
                     context = context
                 )
 

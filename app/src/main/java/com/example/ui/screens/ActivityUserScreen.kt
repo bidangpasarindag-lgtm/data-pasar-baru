@@ -61,11 +61,12 @@ fun ActivityUserScreen(
     }
 
     // Grouped and Filtered list
-    val groupedActivities = filteredActivities
-        .sortedByDescending { it.timestamp }
-        .groupBy { 
-            it.timestamp.substringBefore(" ") 
-        }
+    val sortedActivities = remember(filteredActivities) {
+        filteredActivities.sortedByDescending { com.example.util.DateTimeUtils.parseTimestampToMillis(it.timestamp) }
+    }
+    val groupedActivities = sortedActivities.groupBy { 
+        it.timestamp.substringBefore(" ") 
+    }
     
     val sortedDates = groupedActivities.keys.toList() // Already sorted descending because of sortedByDescending above
     var collapsedDates by remember { mutableStateOf(setOf<String>()) }

@@ -207,7 +207,7 @@ fun DataDetailScreen(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "⚠️ Data Pedagang Belum Lengkap",
+                                text = "Data Pedagang Belum Lengkap",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFFD32F2F)

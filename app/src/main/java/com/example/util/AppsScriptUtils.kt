@@ -1,10 +1,20 @@
 package com.example.util
 
 object AppsScriptUtils {
-    const val VERSION = "2026.08.08 - v2.6 (Apps Script Compatibility Verification & Version Check)"
+    const val VERSION = "2026.08.08 - v2.8 (Active User Logging Fix & Validation System)"
 
     const val CHANGELOG = """
 === CHANGELOG APPS SCRIPT INTEGRASI PASAR WARU ===
+
+[v2.8 - 08/08/2026 10:50:00 WIB]
+• Memperbaiki pencatatan aktivitas pengguna agar hanya pengguna aktif saja yang tercatat (mencegah pencatatan nama ganda/gantian di sheet).
+• Sinkronisasi email dan nama operator dari aplikasi langsung ke webhook secara konsisten.
+
+[v2.7 - 08/08/2026 10:10:00 WIB]
+• Pengurutan timestamp presisi (Tahun -> Bulan -> Tanggal -> Jam -> Menit -> Detik) disinkronkan ke seluruh bagian aplikasi dan log aktivitas.
+• Sistem konfirmasi dialog seragam untuk seluruh aksi hapus (data pedagang, opsi dropdown, dan foto).
+• Tombol Tambah Pedagang disesuaikan di pojok kanan bawah dengan ikon minimalis.
+• Pembersihan tampilan icon peringatan data belum lengkap pada halaman detail pedagang.
 
 [v2.6 - 08/08/2026 09:40:00 WIB]
 • Fitur pengujian kesesuaian/pemeriksaan versi Apps Script aktif di spreadsheet via tombol 'Uji Versi Script'.
@@ -33,9 +43,16 @@ object AppsScriptUtils {
     const val LATEST_CODE = """/**
  * GOOGLE APPS SCRIPT INTEGRASI PENDATAAN PASAR WARU
  * Dinas Perindustrian dan Perdagangan Kabupaten Pamekasan
- * Versi: 2026.08.08 - v2.6 (Apps Script Compatibility Verification & Version Check)
+ * Versi: 2026.08.08 - v2.8 (Active User Logging Fix & Validation System)
  *
  * CHANGELOG:
+ * - v2.8 (08/08/2026 10:50:00 WIB):
+ *   1. Memperbaiki pencatatan aktivitas pengguna agar hanya pengguna aktif saja yang tercatat.
+ *   2. Menghubungkan parameter operatorUsername & operatorName langsung ke backend logging.
+ * - v2.7 (08/08/2026 10:10:00 WIB):
+ *   1. Pengurutan timestamp presisi (Tahun-Bulan-Tanggal Jam:Menit:Detik) disinkronkan ke seluruh aplikasi & log aktivitas.
+ *   2. Sistem konfirmasi dialog seragam pada semua opsi hapus data, foto, dan dropdown.
+ *   3. Penyesuaian FAB Tambah Pedagang di pojok kanan bawah.
  * - v2.6 (08/08/2026 09:40:00 WIB):
  *   1. Fitur pengujian kesesuaian/pemeriksaan versi Apps Script aktif di spreadsheet via tombol 'Uji Versi Script'.
  *   2. Respons JSON berstandar pada action PING/CHECK_VERSION/GET_VERSION.
@@ -222,7 +239,7 @@ function doPost(e) {
       fotoSuratUrl
     ];
     
-    var operatorEmail = params.emailAddress || "bidangpasar.indag@gmail.com";
+    var operatorEmail = params.operatorUsername || params.emailAddress || "bidangpasar.indag@gmail.com";
     var operatorName = params.operatorName || "Petugas";
     
     if (action === "CREATE") {

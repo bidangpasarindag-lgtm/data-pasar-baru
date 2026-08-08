@@ -72,7 +72,7 @@ class PedagangViewModel(application: Application) : AndroidViewModel(application
             if (query.isBlank()) repository.allPedagang
             else repository.searchPedagang(query)
         }
-        .map { list -> list.sortedByDescending { it.timestamp } }
+        .map { list -> list.sortedByDescending { com.example.util.DateTimeUtils.parseTimestampToMillis(it.timestamp) } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Dropdown Options

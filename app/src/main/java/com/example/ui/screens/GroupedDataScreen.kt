@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -51,6 +52,7 @@ fun GroupedDataScreen(
     var pdfProgress by remember { mutableFloatStateOf(-1f) }
     var pdfProcessName by remember { mutableStateOf("") }
     var pdfEstimatedTime by remember { mutableStateOf("") }
+    var pedagangToDelete by remember { mutableStateOf<Pedagang?>(null) }
 
     val sortOptions = listOf(
         "Nama (A-Z)",
@@ -67,8 +69,8 @@ fun GroupedDataScreen(
             "Nama (A-Z)" -> pedagangList.sortedBy { it.namaPedagang.lowercase() }
             "Nama (Z-A)" -> pedagangList.sortedByDescending { it.namaPedagang.lowercase() }
             "Nomor Kios/Los" -> pedagangList.sortedBy { it.nomorKiosLos.lowercase() }
-            "Tanggal (Terbaru)" -> pedagangList.sortedByDescending { it.timestamp }
-            "Tanggal (Terlama)" -> pedagangList.sortedBy { it.timestamp }
+            "Tanggal (Terbaru)" -> pedagangList.sortedByDescending { com.example.util.DateTimeUtils.parseTimestampToMillis(it.timestamp) }
+            "Tanggal (Terlama)" -> pedagangList.sortedBy { com.example.util.DateTimeUtils.parseTimestampToMillis(it.timestamp) }
             "Data Belum Lengkap First" -> pedagangList.sortedBy {
                 val (isComplete, _) = agencyConfig.checkCompleteness(it)
                 if (isComplete) 1 else 0
@@ -200,7 +202,7 @@ fun GroupedDataScreen(
                         items = itemsInGroup,
                         onPedagangClick = onPedagangClick,
                         onEditPedagang = onEditPedagang,
-                        onDeletePedagang = onDeletePedagang,
+                        onDeletePedagang = { pedagangToDelete = it },
                         onViewPhoto = onViewPhoto,
                         onPdfExport = { items ->
                             PdfExportUtils.generateAndOpenPdf(
@@ -234,6 +236,32 @@ fun GroupedDataScreen(
         processName = pdfProcessName,
         estimatedTime = pdfEstimatedTime
     )
+
+    // Delete Confirmation Dialog
+    pedagangToDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pedagangToDelete = null },
+            icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Konfirmasi Hapus Data") },
+            text = { Text("Apakah Anda yakin ingin menghapus data pedagang '${target.namaPedagang}' (${target.jenisRuangDagang} No. ${target.nomorKiosLos})?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeletePedagang(target)
+                        pedagangToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Hapus", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { pedagangToDelete = null }) {
+                    Text("Batal")
+                }
+            }
+        )
+    }
 }
 
 @Composable

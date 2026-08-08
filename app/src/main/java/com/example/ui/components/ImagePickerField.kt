@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
@@ -39,6 +40,7 @@ fun ImagePickerField(
     testTagPrefix: String = "image_picker"
 ) {
     val context = LocalContext.current
+    var showDeletePhotoConfirm by remember { mutableStateOf(false) }
 
     // Gallery Picker
     val galleryLauncher = rememberLauncherForActivityResult(
@@ -95,7 +97,7 @@ fun ImagePickerField(
                         }
 
                         IconButton(
-                            onClick = { onImageSelected(null) },
+                            onClick = { showDeletePhotoConfirm = true },
                             modifier = Modifier.testTag("${testTagPrefix}_delete_button")
                         ) {
                             Icon(Icons.Default.Delete, contentDescription = "Hapus Foto", tint = Color.Red)
@@ -146,5 +148,30 @@ fun ImagePickerField(
                 }
             }
         }
+    }
+
+    if (showDeletePhotoConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeletePhotoConfirm = false },
+            icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Konfirmasi Hapus Foto") },
+            text = { Text("Apakah Anda yakin ingin menghapus $label?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeletePhotoConfirm = false
+                        onImageSelected(null)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Hapus", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showDeletePhotoConfirm = false }) {
+                    Text("Batal")
+                }
+            }
+        )
     }
 }

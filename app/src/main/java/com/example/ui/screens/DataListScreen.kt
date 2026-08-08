@@ -112,8 +112,8 @@ fun DataListScreen(
             "Nama (A-Z)" -> filtered.sortedBy { it.namaPedagang.lowercase() }
             "Nama (Z-A)" -> filtered.sortedByDescending { it.namaPedagang.lowercase() }
             "Nomor Kios/Los" -> filtered.sortedBy { it.nomorKiosLos.lowercase() }
-            "Tanggal (Terbaru)" -> filtered.sortedByDescending { it.timestamp }
-            "Tanggal (Terlama)" -> filtered.sortedBy { it.timestamp }
+            "Tanggal (Terbaru)" -> filtered.sortedByDescending { com.example.util.DateTimeUtils.parseTimestampToMillis(it.timestamp) }
+            "Tanggal (Terlama)" -> filtered.sortedBy { com.example.util.DateTimeUtils.parseTimestampToMillis(it.timestamp) }
             "Data Belum Lengkap First" -> filtered.sortedBy {
                 val (isComplete, _) = agencyConfig.checkCompleteness(it)
                 if (isComplete) 1 else 0
@@ -335,17 +335,22 @@ fun DataListScreen(
 
         // Floating Action Button to Add New Pedagang (if allowed)
         if (agencyConfig.allowCreate) {
-            ExtendedFloatingActionButton(
+            FloatingActionButton(
                 onClick = onAddNewClick,
-                icon = { Icon(Icons.Default.Add, contentDescription = null, tint = Color.White) },
-                text = { Text("Tambah Pedagang", color = Color.White, fontWeight = FontWeight.Bold) },
                 containerColor = DisperindagGreenPrimary,
                 contentColor = Color.White,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(bottom = 80.dp, end = 16.dp)
+                    .padding(bottom = 16.dp, end = 16.dp)
                     .testTag("add_new_pedagang_fab")
-            )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Tambah Pedagang",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
     }
 

@@ -809,15 +809,6 @@ fun SettingsScreen(
                                 }
 
                                 OutlinedTextField(
-                                    value = stateConfig.pdfStorageSubfolder,
-                                    onValueChange = { stateConfig = stateConfig.copy(pdfStorageSubfolder = it) },
-                                    label = { Text("Custom Subfolder PDF (Opsional)") },
-                                    placeholder = { Text("Contoh: KARTU_PEDAGANG") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-
-                                OutlinedTextField(
                                     value = stateConfig.pdfFileNameFormat,
                                     onValueChange = { stateConfig = stateConfig.copy(pdfFileNameFormat = it) },
                                     label = { Text("Format Nama File ({NAMA}, {NOMOR_KIOS})") },
@@ -1051,13 +1042,9 @@ fun SettingsScreen(
                                 CheckboxSettingRow("Tampilkan Lama Berjualan", stateConfig.formShowLamaBerjualan) { stateConfig = stateConfig.copy(formShowLamaBerjualan = it) }
                                 CheckboxSettingRow("Tampilkan Status", stateConfig.formShowStatus) { stateConfig = stateConfig.copy(formShowStatus = it) }
                                 CheckboxSettingRow("Tampilkan Keterangan", stateConfig.formShowKeterangan) { stateConfig = stateConfig.copy(formShowKeterangan = it) }
-                                
-                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                                SubSectionHeader("Syarat Kelengkapan Berkas (Mandatori)", color = Color(0xFFE65100))
-                                
-                                CheckboxSettingRow("Wajib Foto Pedagang", stateConfig.formShowFotoPedagang) { stateConfig = stateConfig.copy(formShowFotoPedagang = it) }
-                                CheckboxSettingRow("Wajib Foto KTP", stateConfig.formShowFotoKtp) { stateConfig = stateConfig.copy(formShowFotoKtp = it) }
-                                CheckboxSettingRow("Wajib Foto Surat Pernyataan", stateConfig.formShowFotoSurat) { stateConfig = stateConfig.copy(formShowFotoSurat = it) }
+                                CheckboxSettingRow("Tampilkan Unggah Foto Pedagang", stateConfig.formShowFotoPedagang) { stateConfig = stateConfig.copy(formShowFotoPedagang = it) }
+                                CheckboxSettingRow("Tampilkan Unggah Foto KTP", stateConfig.formShowFotoKtp) { stateConfig = stateConfig.copy(formShowFotoKtp = it) }
+                                CheckboxSettingRow("Tampilkan Unggah Foto Surat Pernyataan", stateConfig.formShowFotoSurat) { stateConfig = stateConfig.copy(formShowFotoSurat = it) }
                             }
                         }
 
@@ -1790,6 +1777,7 @@ fun DropdownManagementSection(
 ) {
     var isExpanded by remember { mutableStateOf(false) }
     var newValue by remember { mutableStateOf("") }
+    var optionToDelete by remember { mutableStateOf<com.example.data.model.DropdownOption?>(null) }
     
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -1859,7 +1847,7 @@ fun DropdownManagementSection(
                                     fontWeight = if (option.isVisible) FontWeight.Bold else FontWeight.Normal
                                 )
                             }
-                            IconButton(onClick = { onDelete(option.id) }) {
+                            IconButton(onClick = { optionToDelete = option }) {
                                 Icon(Icons.Default.Delete, contentDescription = "Hapus", tint = Color.Red.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
                             }
                         }
@@ -1897,6 +1885,31 @@ fun DropdownManagementSection(
                 }
             }
         }
+    }
+
+    optionToDelete?.let { opt ->
+        AlertDialog(
+            onDismissRequest = { optionToDelete = null },
+            icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Konfirmasi Hapus Opsi") },
+            text = { Text("Apakah Anda yakin ingin menghapus opsi pilihan '${opt.optionValue}'?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDelete(opt.id)
+                        optionToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Hapus", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { optionToDelete = null }) {
+                    Text("Batal")
+                }
+            }
+        )
     }
 }
 

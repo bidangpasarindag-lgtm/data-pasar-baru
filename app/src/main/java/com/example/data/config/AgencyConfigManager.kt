@@ -272,7 +272,8 @@ object AgencyConfigManager {
         )
     }
 
-    fun updateConfig(context: Context, newConfig: AgencyConfig) {
+    fun updateConfig(context: Context, originalConfig: AgencyConfig) {
+        val newConfig = originalConfig.copy(pdfStorageSubfolder = originalConfig.storagePdfFolder)
         val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
         prefs.edit()
             .putString("nama_pemerintah", newConfig.namaPemerintah)

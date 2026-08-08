@@ -152,8 +152,8 @@ class GoogleSheetSyncService {
     suspend fun postActionToSheet(
         action: String, // "CREATE", "UPDATE", "DELETE"
         pedagang: Pedagang,
-        operatorUsername: String = "bidangpasar.indag@gmail.com",
-        operatorName: String = "Petugas Disperindag",
+        operatorUsername: String? = null,
+        operatorName: String? = null,
         fotoPedagangBase64: String? = null,
         fotoKtpBase64: String? = null,
         fotoSuratBase64: String? = null,
@@ -162,14 +162,18 @@ class GoogleSheetSyncService {
         isDeleteFotoSurat: Boolean = false
     ): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
+            val user = UserManager.currentUser.value
+            val finalUsername = operatorUsername ?: user?.email ?: "bidangpasar.indag@gmail.com"
+            val finalName = operatorName ?: user?.displayName ?: "Petugas Disperindag"
+            
             val targetUrl = currentConfig.webhookUrl
             val formBodyBuilder = FormBody.Builder()
                 .add("action", action.uppercase())
                 .add("spreadsheet_id", currentConfig.spreadsheetId)
                 .add("sheet_gid", currentConfig.sheetGid)
                 .add("driveFolderId", currentConfig.driveFolderId)
-                .add("operatorUsername", operatorUsername)
-                .add("operatorName", operatorName)
+                .add("operatorUsername", finalUsername)
+                .add("operatorName", finalName)
                 .add("id", pedagang.id.toString())
                 .add("timestamp", formatTimestampToGoogleSheet(pedagang.timestamp))
                 .add("emailAddress", pedagang.emailAddress)
